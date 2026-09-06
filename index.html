@@ -228,7 +228,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
   <a data-pg="master"><i>⚙</i>기준정보</a>
   <a data-pg="data"><i>⇅</i>데이터 관리</a>
   <a data-pg="help"><i>?</i>사용안내</a>
-  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v12.5</div>
+  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v13.0</div>
 </nav>
 <main>
   <div class="top">
@@ -283,7 +283,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
         <div><label>작업자2</label><input id="f_w2" list="dlW"></div>
         <div><label>작업자3</label><input id="f_w3" list="dlW"></div>
         <div><label>작업자4</label><input id="f_w4" list="dlW"></div>
-        <div><label>근무시간(분)</label><input type="number" id="f_work" min="0" placeholder="570"></div>
+        <div><label>근무시간(분) <span class="muted" style="font-weight:400;font-size:11px" id="shiftInfo"></span></label><input type="number" id="f_work" min="0" placeholder="570"></div>
         <div><label>정지시간(분)</label><input type="number" id="f_stop" min="0" placeholder="0"><label style="display:flex;align-items:center;gap:4px;margin-top:4px;font-size:11px;color:var(--muted);font-weight:400"><input type="checkbox" id="f_auto" checked style="width:auto;margin:0"> 실적에 맞춰 자동 계산</label></div>
         <div><label>휴식·식사(분)</label><input type="number" id="f_brk" placeholder="0"></div>
         <div><label>실적수량(EA)</label><input type="number" id="f_qty" min="0"></div>
@@ -307,7 +307,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
       <div class="fl">
         <button class="p" onclick="saveRec()" id="btnSave">저장 (Ctrl+Enter)</button>
         <button onclick="newRec()">신규작성</button>
-        <button onclick="editSel()" id="btnEdit">수정</button>
+        <button class="p" onclick="saveRec()" id="btnEdit">수정 저장</button>
         <button class="d" onclick="delSel()" id="btnDel">삭제</button>
         <span class="grow"></span>
         <button onclick="exportHist()">엑셀 다운로드</button>
@@ -489,6 +489,13 @@ const DEF_MESMC={'003':'34 심팩250','004':'03 심팩150','005':'28 국일250',
 // MES 품번 → 앱 품번 (표기가 다른 것만)
 const DEF_MESPN={'54610-D3501-(BK)':'54610-D3501','1958-365-2(2호)':'1958-365-2','AT3037-GC-00':'AT3037-GC-01','IW/OW-BDA-1159B':'IW/OW BDA 1159B'};
 const MES_FROM='2026-09-01'; // 8월까지 실적은 손대지 않음
+/* 근무 기준 — 08:00~19:00, 수요일 08:00~17:00
+   휴식: 10:00·15:00·17:00 각 10분 + 12:00~13:00 60분 (수요일은 17:00 휴식 제외) */
+const SHIFT={base:{on:'08:00',off:'19:00',span:660,brk:90,net:570},
+             wed :{on:'08:00',off:'17:00',span:540,brk:80,net:460}};
+function shiftOf(d){const w=new Date(d+'T00:00:00').getDay();return w===3?SHIFT.wed:SHIFT.base}
+function stdWork(d){return shiftOf(d).span}   // 재적 근무(분)
+function stdBrk(d){return shiftOf(d).brk}     // 휴식(분)
 // MES 가동설비 모니터링 서버(정지사유 daily_downtime)
 const DT_URL='https://omngtyewdaqpphnzeate.supabase.co';
 // MES 불량코드(ICOM_RECIEVE_DATA_NG NG_REASON_CODE) → 불량유형
@@ -511,7 +518,11 @@ const pct=n=>isFinite(n)?(n*100).toFixed(1)+'%':'-';
 const now=()=>new Date().toISOString();
 const uid=()=>'R'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const today=()=>{const d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,10)};
-const calc=r=>{const run=Math.max(0,(+r.work||0)-(+r.stop||0));const net=(+r.work||0)-(+r.brk||0);const cap=(+r.spm||0)*Math.max(0,net);return{run,net,cap,oper:r.work?run/r.work:NaN,eff:cap?(+r.qty||0)/cap:NaN}};
+// 근무(재적) − 휴식 = 실근무, 실근무 − 정지 = 가동
+const calc=r=>{const net=Math.max(0,(+r.work||0)-(+r.brk||0));
+  const run=Math.max(0,net-(+r.stop||0));
+  const cap=(+r.spm||0)*net;
+  return{run,net,cap,oper:net?run/net:NaN,eff:cap?(+r.qty||0)/cap:NaN}};
 const inMonth=r=>r.date.slice(0,7)===month;
 const workers=r=>[r.w1,r.w2,r.w3,r.w4].filter(Boolean);
 
@@ -743,8 +754,9 @@ function resetForm(keepDate){const d=keepDate?$('f_date').value:today();editId=n
 function saveRec(cont){
   const r=readForm();
   const miss=[];if(!r.date)miss.push('생산일자');if(!r.mc)miss.push('설비');if(!r.cust)miss.push('고객사');if(!r.pn)miss.push('품번');if(!r.work)miss.push('근무시간');if(!r.spm)miss.push('SPM');
-  if(miss.length){$('fmsg').textContent='입력 필요: '+miss.join(', ');$('fmsg').style.color='var(--red)';return}
-  if(r.stop>r.work){$('fmsg').textContent='정지시간이 근무시간보다 큽니다';$('fmsg').style.color='var(--red)';return}
+  if(miss.length){$('fmsg').textContent='입력 필요: '+miss.join(', ');$('fmsg').style.color='var(--red)';toast('저장 불가 — 입력 필요: '+miss.join(', '));return}
+  {const net=(+r.work||0)-(+r.brk||0);
+   if(r.stop>net){$('fmsg').textContent=`정지시간(${r.stop}분)이 실근무(${net}분 = 근무 ${r.work} − 휴식 ${r.brk||0})보다 큽니다`;$('fmsg').style.color='var(--red)';toast(`저장 불가 — 정지 ${r.stop}분 > 실근무 ${net}분`);return}}
   $('fmsg').style.color='';
   r.ua=now();r.by=localStorage.getItem('tj_me')||'';
   // 작업자 마스터 자동 추가
@@ -763,7 +775,8 @@ function saveRec(cont){
 function editRec(id){const r=S.recs.find(x=>x.id===id);if(!r)return;editId=id;
   if(pg!=='entry')go('entry');
   $('entryTitle').textContent='일보 수정 · '+r.date+' '+r.mc+' · '+r.pn;
-  writeForm(r);$('btnSave').textContent='수정 저장 (Ctrl+Enter)';$('btnEdit').disabled=false;$('btnDel').disabled=false;
+  writeForm(r);if($('f_auto'))$('f_auto').checked=false;   // 저장된 일보는 정지시간을 그대로 유지
+  $('btnSave').textContent='수정 저장 (Ctrl+Enter)';$('btnEdit').disabled=false;$('btnDel').disabled=false;
   renderHist();window.scrollTo({top:0,behavior:'smooth'});}
 function delRec(id){const r=S.recs.find(x=>x.id===id);if(!r)return;if(!askPin(`일보 삭제 · ${r.date} ${r.mc} ${r.pn} (실적 ${fmt(r.qty)})`))return;if(!confirm(r.date+' '+r.mc+' '+r.pn+' 일보를 삭제합니다. 계속할까요?'))return;S.recs=S.recs.filter(x=>x.id!==id);S.del[id]=now();logAdd('일보 삭제',r.date+' '+r.mc+' '+r.pn+' / 실적 '+r.qty);if(editId===id)resetForm(true);commit();toast('삭제했습니다');}
 function copyPrev(){const mc=$('f_mc').value,d=$('f_date').value;if(!mc){$('fmsg').textContent='설비를 먼저 선택하세요';return}
@@ -778,19 +791,29 @@ function renderEntry(){
 }
 function newRec(){resetForm(true);toast('새 일보를 입력하세요')}
 function editSel(){if(!editId){toast('아래 생산이력에서 수정할 줄을 먼저 클릭하세요');return}
-  const r=S.recs.find(x=>x.id===editId);if(r){writeForm(r);window.scrollTo(0,0);toast('입력란으로 불러왔습니다')}}
+  const r=S.recs.find(x=>x.id===editId);if(r){writeForm(r);window.scrollTo(0,0);toast('입력란으로 다시 불러왔습니다')}}
+function undoEdit(){editSel()}
 function delSel(){if(!editId){toast('아래 생산이력에서 삭제할 줄을 먼저 클릭하세요');return}delRec(editId)}
 ['f_spm','f_work','f_stop','f_brk','f_qty','f_ngp'].forEach(id=>$(id).addEventListener('input',readout));
 // 실적수량을 고치면 가동시간(=실적÷SPM)을 다시 잡아 가동율도 함께 바뀌게 한다
 function autoRun(){
   if(!$('f_auto')||!$('f_auto').checked)return;
-  const spm=+$('f_spm').value||0, work=+$('f_work').value||0, qty=+$('f_qty').value||0;
+  const spm=+$('f_spm').value||0, work=+$('f_work').value||0, qty=+$('f_qty').value||0, brk=+$('f_brk').value||0;
   if(!spm||!work)return;
-  const run=Math.min(work,Math.round(qty/spm));
-  $('f_stop').value=Math.max(0,work-run);
+  const net=Math.max(0,work-brk);
+  const run=Math.min(net,Math.round(qty/spm));
+  $('f_stop').value=Math.max(0,net-run);
   readout();
 }
-['f_qty','f_spm','f_work'].forEach(id=>$(id).addEventListener('input',autoRun));
+['f_qty','f_spm','f_work','f_brk'].forEach(id=>$(id).addEventListener('input',autoRun));
+// 생산일자를 고르면 요일 표준 근무시간을 채운다 (새 일보일 때만)
+$('f_date').addEventListener('change',()=>{
+  const d=$('f_date').value;if(!d)return;
+  const sh=shiftOf(d);
+  if(!editId){$('f_work').value=sh.span;$('f_brk').value=sh.brk;readout()}
+  const el=$('shiftInfo');
+  if(el)el.textContent=`${sh.on}~${sh.off} = ${sh.span}분 · 휴식 ${sh.brk}분 → 실근무 ${sh.net}분`+(sh===SHIFT.wed?' (수요일)':'');
+});
 $('f_auto').addEventListener('change',autoRun);
 $('f_stop').addEventListener('input',()=>{$('f_auto').checked=false});
 $('f_pn').addEventListener('change',onPn);
@@ -876,11 +899,14 @@ async function openMes(){
   // MES 정지사유(daily_downtime) — 사유별 합산
   const dtTxt={},dtMin={},dtRun={};
   dt.forEach(x=>{
-    const ev=[].concat(x.stop_events||[],x.planned_events||[]);
+    const isBrk=n=>/휴식|식사|중식/.test(n||'');
+    const ev=[].concat(x.stop_events||[],(x.planned_events||[]).filter(e=>!isBrk(e.name)));
     const g={};ev.forEach(e=>{const k=e.name||'기타';g[k]=(g[k]||0)+(+e.min||0)});
     const list=Object.entries(g).sort((a,b)=>b[1]-a[1]).map(([k,v])=>k+' '+Math.round(v)+'분');
     if(list.length)dtTxt[x.machine_code]=list.join(' / ');
-    dtMin[x.machine_code]=Math.round((+x.stop_min||0)+(+x.planned_min||0));
+    // 근무시간은 휴식을 뺀 실근무이므로 정지에서도 휴식·식사는 제외한다
+    const brkMin=(x.planned_events||[]).filter(e=>isBrk(e.name)).reduce((a,e)=>a+(+e.min||0),0);
+    dtMin[x.machine_code]=Math.round((+x.stop_min||0)+Math.max(0,(+x.planned_min||0)-brkMin));
     dtRun[x.machine_code]=Math.round(+x.run_min||0);
   });
   const stopTxt={};
@@ -938,7 +964,7 @@ async function openMes(){
     const it=S.master.items.find(y=>y.pn===pn);
     let run=Math.round(runMap[code+'|'+x.pn]||0);
     const last=S.recs.filter(r=>r.mc===mc&&r.date<d).sort((a,b)=>b.date.localeCompare(a.date))[0];
-    let work=last?last.work:570;
+    let work=stdWork(d);const brk0=stdBrk(d);   // 재적(평일 660·수 540) + 휴식(90·80)
     // 같은 설비에 품번이 여럿이면 설비 합계를 실적 비율로 나눈다 (근무·정지 이중계산 방지)
     const mates=prod.filter(y=>(y.party||'')===code);
     const mSum=mates.reduce((a,y)=>a+(+y.qty||0),0)||1;
@@ -947,9 +973,9 @@ async function openMes(){
     if(run>0){runSrc='소재사용';}
     else if(dtRun[code]>0){run=Math.round(dtRun[code]*mShare);runSrc='모니터링';}   // 소재사용 기록이 없으면 모니터링 가동시간
     let stopM=dtMin[code]!=null?Math.round(dtMin[code]*mShare):null;
-    if(runSrc&&stopM!=null)work=run+stopM;                                       // 근무 = 측정 가동 + 측정 정지
+    if(runSrc&&stopM!=null)work=run+stopM+brk0;                                  // 재적 = 가동 + 정지 + 휴식
     else if(work<run)work=Math.ceil(run/10)*10;
-    const brk=last?(last.brk||0):0;
+    const brk=brk0;
     const dup=S.recs.find(r=>r.date===d&&r.mc===mc&&r.pn===(pn||x.pn));
     const share=sumByPn[x.pn]?(+x.qty)/sumByPn[x.pn]:1;
     const sp=badSplit[x.pn]||{real:bad[x.pn]||0,proc:0};
@@ -962,12 +988,12 @@ async function openMes(){
     let runEst=0;
     if(noRun){const spm0=spmFor(mc,pn||x.pn)||0;const q0=(cz?(+cz.actual_qty||0):(+x.qty||0));
       if(spm0>0&&q0>0){runEst=Math.round(q0/spm0);
-        if(runEst>=work)work=Math.max(570,Math.ceil((runEst+30)/10)*10);   // 이전 근무시간이 짧으면 기본 근무로 확장
+        if(runEst>=work-brk0)work=Math.max(stdWork(d),Math.ceil((runEst+brk0+30)/10)*10);
         runEst=Math.min(work,runEst);noRun=false}}
     const upd=!!(dup&&+dup.qty!==newQty);
     return{i,code,pnCode:x.pn,name:nameMap[x.pn]||'',lot:x.lot||'',mc,pn:pn||'@'+x.pn,
       name2:it?it.name:(nameMap[x.pn]||''),cust:it?it.cust:'',run:runEst||run,work,brk,runSrc,
-      stop:(stopM!=null?stopM:(noRun?(last?last.stop:0):Math.max(0,work-(runEst||run)))),noRun,runEst,
+      stop:(stopM!=null?stopM:(noRun?(last?last.stop:0):Math.max(0,work-brk0-(runEst||run)))),noRun,runEst,
       qty:cz?(+cz.actual_qty||0):(+x.qty||0),ng,ngp,ab:bad[x.pn]||0,
       w1:(cz&&cz.worker)||(last?last.w1:''),sr:dtTxt[code]||stopTxt[code]||'',dtMin:dtMin[code],
       note:[badNote[x.pn]||'',cz&&cz.memo?String(cz.memo):''].filter(Boolean).join(' / '),
