@@ -228,7 +228,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
   <a data-pg="master"><i>⚙</i>기준정보</a>
   <a data-pg="data"><i>⇅</i>데이터 관리</a>
   <a data-pg="help"><i>?</i>사용안내</a>
-  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v14.2</div>
+  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v14.3</div>
 </nav>
 <main>
   <div class="top">
@@ -906,15 +906,23 @@ async function openMes(){
     const dh={'apikey':DT_KEY,'Authorization':'Bearer '+DT_KEY};
     const [r1,r3,r4,r5]=await Promise.all([dpFetch(),
       fetch(q3,{headers:dh}).catch(()=>null),closeFetch(),fetch(q5,{headers:dh}).catch(()=>null)]);
-    if(!r1.ok)throw new Error('daily_production '+r1.status+' '+(r1.text||''));
-    const dp=r1.rows;
+    let dp=r1.rows, dpSrc=r1.ok?'모니터링':'';
+    // 모니터링 실적이 비면 MES 원장(stock_ledger)으로 대체 — 권한/집계 상황과 무관하게 일보가 비지 않게
+    if(!dp.length){
+      try{const rl=await fetch(SB_URL+'/rest/v1/stock_ledger?select=pn,kind,qty,party,note&led_date=eq.'+d
+            +'&kind=in.(%EC%83%9D%EC%82%B0%EC%9E%85%EA%B3%A0,%EB%B6%88%EB%9F%89%ED%8F%90%EA%B8%B0)&limit=500',{headers:hdr});
+        if(rl.ok){const lg=await rl.json();
+          if(lg.length){dpSrc='원장';
+            led=lg.map(x=>({pn:x.pn,kind:x.kind,qty:+x.qty||0,party:x.party,lot:'',note:x.note||''}));}}
+      }catch(e){}
+    }
     // daily_production → 생산입고/불량 형식으로 변환 (뒤 로직 공용)
-    led=[];dp.forEach(r=>{
+    if(dpSrc!=='원장'){led=[];dp.forEach(r=>{
       const q=+(r.shot_qty??r.qty??r.prod_qty??r.actual_qty??r.total_qty??0)||0;
       led.push({pn:r.item_code||r.pn,kind:'생산입고',qty:q,party:r.machine_code||r.party,lot:r.work_order_no||'',note:'',
         name:r.item_name||'',start:r.start_time||'',end:r.end_time||''});
       if(+r.abnormal_shot>0)led.push({pn:r.item_code||r.pn,kind:'불량폐기',qty:+r.abnormal_shot,party:r.machine_code||r.party,lot:'',note:'불량사유 P10:'+(+r.abnormal_shot)});
-    });
+    });}
     use=[];   // 소재사용 구간은 더 이상 쓰지 않음 (가동시간은 모니터링 run_min)
     dt=(r3&&r3.ok)?await r3.json():[];
     clo=r4.ok?r4.rows:[];MESCLO=clo.slice();
@@ -929,7 +937,7 @@ async function openMes(){
             mes_qty:+it.actual_qty||0,actual_qty:+it.adj_qty,diff_qty:(+it.adj_qty)-(+it.actual_qty||0),
             reason:ps.reason||'',memo:ps.adj_memo||'',worker:L.worker||'',closed_at:L.created_at})})});
     }
-    MESDIAG={dp:dp.length,dpFilter:r1.filter||'',dpAll:r1.all,dpSample:r1.sample,cloOk:r4.ok||!!(r5&&r5.ok),cloSt:r4.ok?r4.status:(r4.status+(r4.text?' · '+r4.text:'')),cloFilter:r4.filter||'',
+    MESDIAG={dp:dp.length,dpSrc,ledN:dpSrc==='원장'?led.filter(x=>x.kind==='생산입고').length:0,dpFilter:r1.filter||'',dpAll:r1.all,dpSample:r1.sample,cloOk:r4.ok||!!(r5&&r5.ok),cloSt:r4.ok?r4.status:(r4.status+(r4.text?' · '+r4.text:'')),cloFilter:r4.filter||'',
       logOk:!!(r5&&r5.ok),logSt:r5?r5.status:'-',logN,
       clo:clo.length,cloWith:clo.filter(x=>x.actual_qty!=null).length};
   }catch(e){$('modal').innerHTML='<h2>MES 실적 불러오기</h2><p>MES 자료를 읽지 못했습니다. 인터넷 연결을 확인하세요.</p><div class="fl"><button onclick="closeMask()">닫기</button></div>';return}
@@ -1096,7 +1104,9 @@ function drawMes(d){
   const dg=MESDIAG||{};
   const cloTag=!dg.cloOk?`<span class="tag r">마감 자료 조회 실패 (${esc(String(dg.cloSt||''))})</span>`
     :`<span class="tag ${dg.cloWith?'g':''}">MES 마감 ${dg.clo||0}건${dg.cloWith?` · 실제양품 ${dg.cloWith}건`:' · 실제양품 입력 없음'}${dg.logN?` (점검로그 ${dg.logN}건 포함)`:''}</span>`;
-  const ledTag=`<span class="tag${dg.dp?'':' r'}">모니터링 실적 ${dg.dp||0}건${dg.dpFilter?' · '+dg.dpFilter:''}${(!dg.dp&&dg.dpAll)?` (표 전체 ${dg.dpAll}건 · 날짜 불일치)`:''}</span>`+(nMon?`<span class="tag g">모니터링 마감 ${nMon}줄</span>`:'');
+  const ledTag=(dg.dpSrc==='원장'
+      ? `<span class="tag a">모니터링 실적 0건 → MES 원장 ${dg.ledN||0}건 사용</span>`
+      : `<span class="tag${dg.dp?'':' r'}">모니터링 실적 ${dg.dp||0}건${dg.dpFilter?' · '+dg.dpFilter:''}${(!dg.dp&&dg.dpAll)?` (표 전체 ${dg.dpAll}건)`:''}</span>`)+(nMon?`<span class="tag g">모니터링 마감 ${nMon}줄</span>`:'');
   const warn=[nClosed?`현장 마감 반영 ${nClosed}줄`:'',nWait?`실제양품 미입력 ${nWait}줄`:'',nNoMc?`설비 미지정 ${nNoMc}줄`:'',nPend?`생산마감 미완료 ${nPend}줄`:'',nNoRun?`가동시간 없음 ${nNoRun}줄`:'',nNoSpm?`SPM 입력 필요 ${nNoSpm}줄`:'',nUpd?`덮어쓰기 ${nUpd}줄`:'',nDup?`이미 저장 ${nDup}줄`:''].filter(Boolean).join(' · ');
   $('modal').innerHTML=`<div class="fl" style="margin-bottom:10px"><h2 style="flex:1">MES 실적 불러오기 · ${d}</h2><button class="s" onclick="showClo('${d}')">마감 자료 보기</button><button onclick="closeMask()">닫기</button></div>
   <p class="muted" style="margin-top:0">MES 모니터링 서버에서 설비별 생산수량을 읽고, 현장에서 확정한 <b>실제 양품수량(생산마감)</b>이 있으면 그 값을 실적으로 씁니다. 근무시간·작업자·정지사유를 확인·수정한 뒤 저장하세요. 정지시간은 근무−MES가동으로 자동 계산되며 직접 고칠 수 있습니다. 정지사유·정지시간은 <b>MES 가동설비 모니터링</b>의 비가동 집계에서 그대로 가져옵니다(없으면 가동이 끊긴 시간대로 대체). 특기사항에는 MES 불량폐기 사유가 <b>코드 대신 불량유형 이름</b>으로 들어옵니다.</p>
