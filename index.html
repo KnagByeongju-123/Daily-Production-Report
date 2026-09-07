@@ -228,7 +228,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
   <a data-pg="master"><i>⚙</i>기준정보</a>
   <a data-pg="data"><i>⇅</i>데이터 관리</a>
   <a data-pg="help"><i>?</i>사용안내</a>
-  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v14.1</div>
+  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v14.2</div>
 </nav>
 <main>
   <div class="top">
@@ -863,7 +863,26 @@ async function openMes(){
   let led=[],use=[],dt=[],clo=[];
   try{
     // 생산실적은 MES 모니터링 서버(daily_production)에서 바로 읽는다 — 점검앱과 같은 출처
-    const q1=DT_URL+'/rest/v1/daily_production?select=*&ymd=eq.'+d+'&order=machine_code.asc,item_code.asc&limit=500';
+    // 날짜 컬럼명·형식이 달라도 찾도록 여러 방법을 순서대로 시도
+    const dpFetch=async()=>{
+      const tries=[['ymd=eq.'+d,'ymd'],['work_date=eq.'+d,'work_date'],['prod_date=eq.'+d,'prod_date'],
+                   ['date=eq.'+d,'date'],['ymd=like.'+d+'*','ymd~like']];
+      let last={status:'연결실패',text:''};
+      for(const [f,tag] of tries){
+        try{const r=await fetch(DT_URL+'/rest/v1/daily_production?select=*&'+f+'&limit=800',{headers:dh});
+          if(r.ok){const j=await r.json();if(j.length)return{ok:true,rows:j,status:200,filter:tag};last={status:200,text:'0건'};continue}
+          last={status:r.status,text:(await r.text()).slice(0,120)};
+          if(r.status!==400)break;
+        }catch(e){last={status:'연결실패',text:String(e.message||e)}}
+      }
+      // 마지막 수단: 최근 자료를 받아 날짜가 들어간 줄만 고른다
+      try{const r=await fetch(DT_URL+'/rest/v1/daily_production?select=*&limit=1500',{headers:dh});
+        if(r.ok){const all=await r.json();
+          const rows=all.filter(x=>Object.values(x).some(v=>typeof v==='string'&&v.slice(0,10)===d));
+          return{ok:true,rows,status:200,filter:rows.length?'client':'client(0)',all:all.length,sample:all[0]}}
+        last={status:r.status,text:(await r.text()).slice(0,120)};}catch(e){}
+      return{ok:false,rows:[],...last};
+    };
     const q3=DT_URL+'/rest/v1/daily_downtime?select=machine_code,stop_events,planned_events,stop_min,planned_min,run_min&ymd=eq.'+d+'&limit=100';
     // 생산마감(모니터링 서버) — 날짜 컬럼명이 달라도 찾도록 순서대로 시도
     const closeFetch=async()=>{
@@ -885,15 +904,16 @@ async function openMes(){
     // 점검앱은 생산마감을 mes_check_log(category=prod)에도 남긴다 — 예비 경로
     const q5=DT_URL+'/rest/v1/mes_check_log?select=machine_code,item_code,worker,payload,created_at&category=eq.prod&payload->production_snapshot->>work_date=eq.'+d+'&order=created_at.desc&limit=300';
     const dh={'apikey':DT_KEY,'Authorization':'Bearer '+DT_KEY};
-    const [r1,r3,r4,r5]=await Promise.all([fetch(q1,{headers:dh}),
+    const [r1,r3,r4,r5]=await Promise.all([dpFetch(),
       fetch(q3,{headers:dh}).catch(()=>null),closeFetch(),fetch(q5,{headers:dh}).catch(()=>null)]);
-    if(!r1.ok)throw new Error('daily_production '+r1.status+' '+(await r1.text()).slice(0,80));
-    const dp=await r1.json();
+    if(!r1.ok)throw new Error('daily_production '+r1.status+' '+(r1.text||''));
+    const dp=r1.rows;
     // daily_production → 생산입고/불량 형식으로 변환 (뒤 로직 공용)
     led=[];dp.forEach(r=>{
-      led.push({pn:r.item_code,kind:'생산입고',qty:+r.shot_qty||0,party:r.machine_code,lot:r.work_order_no||'',note:'',
+      const q=+(r.shot_qty??r.qty??r.prod_qty??r.actual_qty??r.total_qty??0)||0;
+      led.push({pn:r.item_code||r.pn,kind:'생산입고',qty:q,party:r.machine_code||r.party,lot:r.work_order_no||'',note:'',
         name:r.item_name||'',start:r.start_time||'',end:r.end_time||''});
-      if(+r.abnormal_shot>0)led.push({pn:r.item_code,kind:'불량폐기',qty:+r.abnormal_shot,party:r.machine_code,lot:'',note:'불량사유 P10:'+(+r.abnormal_shot)});
+      if(+r.abnormal_shot>0)led.push({pn:r.item_code||r.pn,kind:'불량폐기',qty:+r.abnormal_shot,party:r.machine_code||r.party,lot:'',note:'불량사유 P10:'+(+r.abnormal_shot)});
     });
     use=[];   // 소재사용 구간은 더 이상 쓰지 않음 (가동시간은 모니터링 run_min)
     dt=(r3&&r3.ok)?await r3.json():[];
@@ -909,7 +929,7 @@ async function openMes(){
             mes_qty:+it.actual_qty||0,actual_qty:+it.adj_qty,diff_qty:(+it.adj_qty)-(+it.actual_qty||0),
             reason:ps.reason||'',memo:ps.adj_memo||'',worker:L.worker||'',closed_at:L.created_at})})});
     }
-    MESDIAG={dp:dp.length,cloOk:r4.ok||!!(r5&&r5.ok),cloSt:r4.ok?r4.status:(r4.status+(r4.text?' · '+r4.text:'')),cloFilter:r4.filter||'',
+    MESDIAG={dp:dp.length,dpFilter:r1.filter||'',dpAll:r1.all,dpSample:r1.sample,cloOk:r4.ok||!!(r5&&r5.ok),cloSt:r4.ok?r4.status:(r4.status+(r4.text?' · '+r4.text:'')),cloFilter:r4.filter||'',
       logOk:!!(r5&&r5.ok),logSt:r5?r5.status:'-',logN,
       clo:clo.length,cloWith:clo.filter(x=>x.actual_qty!=null).length};
   }catch(e){$('modal').innerHTML='<h2>MES 실적 불러오기</h2><p>MES 자료를 읽지 못했습니다. 인터넷 연결을 확인하세요.</p><div class="fl"><button onclick="closeMask()">닫기</button></div>';return}
@@ -1076,7 +1096,7 @@ function drawMes(d){
   const dg=MESDIAG||{};
   const cloTag=!dg.cloOk?`<span class="tag r">마감 자료 조회 실패 (${esc(String(dg.cloSt||''))})</span>`
     :`<span class="tag ${dg.cloWith?'g':''}">MES 마감 ${dg.clo||0}건${dg.cloWith?` · 실제양품 ${dg.cloWith}건`:' · 실제양품 입력 없음'}${dg.logN?` (점검로그 ${dg.logN}건 포함)`:''}</span>`;
-  const ledTag=`<span class="tag">모니터링 실적 ${dg.dp||0}건</span>`+(nMon?`<span class="tag g">모니터링 마감 ${nMon}줄</span>`:'');
+  const ledTag=`<span class="tag${dg.dp?'':' r'}">모니터링 실적 ${dg.dp||0}건${dg.dpFilter?' · '+dg.dpFilter:''}${(!dg.dp&&dg.dpAll)?` (표 전체 ${dg.dpAll}건 · 날짜 불일치)`:''}</span>`+(nMon?`<span class="tag g">모니터링 마감 ${nMon}줄</span>`:'');
   const warn=[nClosed?`현장 마감 반영 ${nClosed}줄`:'',nWait?`실제양품 미입력 ${nWait}줄`:'',nNoMc?`설비 미지정 ${nNoMc}줄`:'',nPend?`생산마감 미완료 ${nPend}줄`:'',nNoRun?`가동시간 없음 ${nNoRun}줄`:'',nNoSpm?`SPM 입력 필요 ${nNoSpm}줄`:'',nUpd?`덮어쓰기 ${nUpd}줄`:'',nDup?`이미 저장 ${nDup}줄`:''].filter(Boolean).join(' · ');
   $('modal').innerHTML=`<div class="fl" style="margin-bottom:10px"><h2 style="flex:1">MES 실적 불러오기 · ${d}</h2><button class="s" onclick="showClo('${d}')">마감 자료 보기</button><button onclick="closeMask()">닫기</button></div>
   <p class="muted" style="margin-top:0">MES 모니터링 서버에서 설비별 생산수량을 읽고, 현장에서 확정한 <b>실제 양품수량(생산마감)</b>이 있으면 그 값을 실적으로 씁니다. 근무시간·작업자·정지사유를 확인·수정한 뒤 저장하세요. 정지시간은 근무−MES가동으로 자동 계산되며 직접 고칠 수 있습니다. 정지사유·정지시간은 <b>MES 가동설비 모니터링</b>의 비가동 집계에서 그대로 가져옵니다(없으면 가동이 끊긴 시간대로 대체). 특기사항에는 MES 불량폐기 사유가 <b>코드 대신 불량유형 이름</b>으로 들어옵니다.</p>
