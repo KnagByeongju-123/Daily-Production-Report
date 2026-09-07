@@ -228,7 +228,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
   <a data-pg="master"><i>⚙</i>기준정보</a>
   <a data-pg="data"><i>⇅</i>데이터 관리</a>
   <a data-pg="help"><i>?</i>사용안내</a>
-  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v13.4</div>
+  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v13.5</div>
 </nav>
 <main>
   <div class="top">
@@ -854,7 +854,7 @@ function mapPn(code,mc,d,allowLast){
   if(allowLast&&mc){const last=S.recs.filter(r=>r.mc===mc&&(!d||r.date<d)).sort((a,b)=>b.date.localeCompare(a.date))[0];if(last)return last.pn}
   return '';
 }
-let MESROWS=[],MESDIAG={};
+let MESROWS=[],MESDIAG={},MESCLO=[];
 async function openMes(){
   const d=$('f_date').value||today();
   if(d<MES_FROM){toast(MES_FROM.slice(0,7)+'월부터 MES 연동을 씁니다. 그 이전은 기존 자료를 그대로 두세요');return}
@@ -891,7 +891,7 @@ async function openMes(){
     led=await r1.json();
     use=r2.ok?await r2.json():[];
     dt=(r3&&r3.ok)?await r3.json():[];
-    clo=r4.ok?r4.rows:[];
+    clo=r4.ok?r4.rows:[];MESCLO=clo.slice();
     // 예비 경로 병합: production_close에 없는 설비·품번만 mes_check_log에서 채움 (최신 기록 우선)
     let logN=0;
     if(r5&&r5.ok){
@@ -1071,7 +1071,7 @@ function drawMes(d){
     :`<span class="tag ${dg.cloWith?'g':''}">MES 마감 ${dg.clo||0}건${dg.cloWith?` · 실제양품 ${dg.cloWith}건`:' · 실제양품 입력 없음'}${dg.logN?` (점검로그 ${dg.logN}건 포함)`:''}</span>`;
   const ledTag=(nMon?`<span class="tag g">모니터링 마감 ${nMon}줄</span>`:'')+(nLed?`<span class="tag g">원장 실마감 ${nLed}줄</span>`:'');
   const warn=[nClosed?`현장 마감 반영 ${nClosed}줄`:'',nWait?`실제양품 미입력 ${nWait}줄`:'',nNoMc?`설비 미지정 ${nNoMc}줄`:'',nPend?`생산마감 미완료 ${nPend}줄`:'',nNoRun?`가동시간 없음 ${nNoRun}줄`:'',nNoSpm?`SPM 입력 필요 ${nNoSpm}줄`:'',nUpd?`덮어쓰기 ${nUpd}줄`:'',nDup?`이미 저장 ${nDup}줄`:''].filter(Boolean).join(' · ');
-  $('modal').innerHTML=`<div class="fl" style="margin-bottom:10px"><h2 style="flex:1">MES 실적 불러오기 · ${d}</h2><button onclick="closeMask()">닫기</button></div>
+  $('modal').innerHTML=`<div class="fl" style="margin-bottom:10px"><h2 style="flex:1">MES 실적 불러오기 · ${d}</h2><button class="s" onclick="showClo('${d}')">마감 자료 보기</button><button onclick="closeMask()">닫기</button></div>
   <p class="muted" style="margin-top:0">현장에서 확정한 <b>실제 양품수량(생산마감)</b>이 있으면 그 값을, 없으면 MES 일 생산수량을 실적으로 채웁니다. 근무시간·작업자·정지사유를 확인·수정한 뒤 저장하세요. 정지시간은 근무−MES가동으로 자동 계산되며 직접 고칠 수 있습니다. 정지사유·정지시간은 <b>MES 가동설비 모니터링</b>의 비가동 집계에서 그대로 가져옵니다(없으면 가동이 끊긴 시간대로 대체). 특기사항에는 MES 불량폐기 사유가 <b>코드 대신 불량유형 이름</b>으로 들어옵니다.</p>
   <div class="fl" style="margin-bottom:8px"><span class="tag">설비 ${nMc}대 · ${MESROWS.length}줄</span>${cloTag}${ledTag}${warn?`<span class="tag a">${warn}</span>`:''}</div>
   <div class="tw" style="max-height:60vh"><table><tr><th></th><th>MES</th><th>설비</th><th>품번</th><th>작업자</th><th class=num>SPM</th><th>근무(분)</th><th class=num>MES가동</th><th>정지(분)</th><th>실적(일생산)</th><th class=num>MES불량</th><th>작업불량</th><th>시타발·검사</th><th>정지사유</th><th>특기사항(불량사유)</th><th></th></tr>
@@ -1704,6 +1704,24 @@ function backupMaster(){
   dl(new Blob([JSON.stringify(b,null,1)],{type:'application/json'}),'기준정보_백업_'+today()+'.json');
   toast('기준정보를 파일로 내려받았습니다');
 }
+/* 모니터링 서버에서 받은 마감 자료를 그대로 보여준다 (연동 점검용) */
+function showClo(d){
+  const dg=MESDIAG||{};
+  const rows=(MESCLO||[]).map(x=>`<tr><td>${esc(x.machine_code||'')}</td><td>${esc(x.item_code||'')}</td><td class=num>${fmt(+x.mes_qty||0)}</td><td class=num><b>${x.actual_qty==null?'-':fmt(+x.actual_qty)}</b></td><td class=num>${x.actual_qty==null?'':fmt((+x.actual_qty)-(+x.mes_qty||0))}</td><td>${esc(x.worker||'')}</td><td class=muted>${esc(x.reason||'')}</td></tr>`).join('');
+  const mapped=(MESCLO||[]).map(x=>{const mc=(S.master.mesMc||{})[x.machine_code]||'';return mc?'':x.machine_code}).filter(Boolean);
+  alert(`[마감 자료 점검 · ${d}]\n`+
+    `앱 버전: ${(document.querySelector('.foot')||{}).textContent?.match(/v[\d.]+/)?.[0]||'-'}\n`+
+    `조회 결과: ${dg.cloOk?'성공':'실패'} (${dg.cloSt}${dg.cloFilter?' · 필터 '+dg.cloFilter:''})\n`+
+    `마감 ${dg.clo||0}건 · 실제양품 입력 ${dg.cloWith||0}건 · 점검로그 ${dg.logN||0}건\n`+
+    (mapped.length?`설비코드 미연결: ${[...new Set(mapped)].join(', ')} → 기준정보 MES 설비코드 연결 확인\n`:'')+
+    `\n아래 표는 서버에서 받은 원본입니다.`);
+  const w=window.open('','_blank','width=900,height=600');
+  if(w){w.document.write(`<title>마감 자료 ${d}</title><style>body{font:13px sans-serif;padding:14px}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px 8px}.num{text-align:right}.muted{color:#777}</style>
+    <h3>모니터링 서버 production_close · ${d} · ${(MESCLO||[]).length}건</h3>
+    <table><tr><th>machine_code</th><th>item_code</th><th>mes_qty</th><th>actual_qty</th><th>차이</th><th>worker</th><th>reason</th></tr>${rows||'<tr><td colspan=7>자료 없음</td></tr>'}</table>
+    <p class=muted>조회: ${dg.cloOk?'성공':'실패'} · ${esc(String(dg.cloSt||''))}</p>`);w.document.close()}
+}
+
 /* ===== 실마감 동기화: 저장된 일보 실적을 MES 원장(실마감 반영)과 맞춤 ===== */
 async function syncClose(){
   const from=prompt('실마감 동기화 시작일 (YYYY-MM-DD)',MES_FROM);if(!from)return;
