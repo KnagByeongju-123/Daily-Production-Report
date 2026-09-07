@@ -228,7 +228,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
   <a data-pg="master"><i>⚙</i>기준정보</a>
   <a data-pg="data"><i>⇅</i>데이터 관리</a>
   <a data-pg="help"><i>?</i>사용안내</a>
-  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v13.5</div>
+  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v13.6</div>
 </nav>
 <main>
   <div class="top">
@@ -1727,26 +1727,46 @@ async function syncClose(){
   const from=prompt('실마감 동기화 시작일 (YYYY-MM-DD)',MES_FROM);if(!from)return;
   const to=prompt('종료일 (YYYY-MM-DD)',today());if(!to)return;
   const mcMap=S.master.mesMc||{};
-  let upd=0,same=0,miss=0,days=0;const changes=[];
+  let upd=0,same=0,miss=0,days=0,nClo=0,nLed=0;const changes=[];const errs=[];
   try{
+    // ① 모니터링 서버 생산마감 (1순위)
+    const dh={'apikey':DT_KEY,'Authorization':'Bearer '+DT_KEY};
+    let clo=[];
+    try{const r=await fetch(DT_URL+'/rest/v1/production_close?select=*&ymd=gte.'+from+'&ymd=lte.'+to+'&limit=3000',{headers:dh});
+      if(r.ok)clo=await r.json();else errs.push('마감 조회 '+r.status+' '+(await r.text()).slice(0,80));
+    }catch(e){errs.push('마감 조회 실패: '+e.message)}
+    const cmap={};clo.forEach(x=>{if(x.actual_qty==null)return;const d=String(x.ymd||x.work_date||'').slice(0,10);
+      cmap[d+'|'+(x.machine_code||'')+'|'+x.item_code]=x;});
+    // ② MES 원장 (예비)
     const q=SB_URL+'/rest/v1/stock_ledger?select=led_date,party,pn,qty,note&kind=eq.생산입고&led_date=gte.'+from+'&led_date=lte.'+to+'&limit=3000';
     const r=await fetch(q,{headers:hdr});if(!r.ok)throw new Error('원장 조회 '+r.status);
     const led=await r.json();
     const byDay={};led.forEach(x=>{(byDay[x.led_date]=byDay[x.led_date]||[]).push(x)});
+    // 마감만 있고 원장에 없는 조합도 대상에 넣는다
+    clo.forEach(x=>{const d=String(x.ymd||x.work_date||'').slice(0,10);if(!d)return;
+      const L=byDay[d]=byDay[d]||[];
+      if(!L.some(y=>(y.party||'')===(x.machine_code||'')&&y.pn===x.item_code))L.push({led_date:d,party:x.machine_code,pn:x.item_code,qty:+x.mes_qty||0,note:''})});
     Object.keys(byDay).forEach(d=>{days++;
       byDay[d].forEach(x=>{
         const mc=mcMap[x.party||'']||'';const pn=(S.master.mesPn||{})[x.pn]||x.pn;
         const rec=S.recs.find(z=>z.date===d&&z.mc===mc&&(z.pn===pn||z.pn===x.pn));
         if(!rec){miss++;return}
+        const cz=cmap[d+'|'+(x.party||'')+'|'+x.pn];
         const nm=String(x.note||'').match(/실마감\s*반영.*?MES\s*([\d,]+)\s*→\s*실\s*([\d,]+)/);
-        const q2=+x.qty||0;
-        if(+rec.qty===q2){same++;return}
-        changes.push(`${d} ${mc} ${pn}: ${fmt(rec.qty)} → ${fmt(q2)}`);
-        rec.qty=q2;if(nm)rec.mes=+nm[1].replace(/,/g,'');rec.src=nm?'마감':'MES';rec.ua=now();upd++;
-        if(rec.spm&&(+rec.work-+rec.stop)<Math.round(q2/rec.spm)*0.5){rec.work=+rec.stop+Math.round(q2/rec.spm)}   // 가동이 실적 대비 말이 안 되면 근무만 늘림
+        let q2,mesv,src;
+        if(cz){q2=+cz.actual_qty||0;mesv=cz.mes_qty!=null?+cz.mes_qty:(+x.qty||0);src='마감';nClo++;}
+        else if(nm){q2=+x.qty||0;mesv=+nm[1].replace(/,/g,'');src='마감';nLed++;}
+        else{q2=+x.qty||0;mesv=q2;src='MES';}
+        if(+rec.qty===q2&&(rec.src||'')===src){same++;return}
+        changes.push(`${d} ${mc} ${pn}: ${fmt(rec.qty)} → ${fmt(q2)}${cz?' (모니터링)':nm?' (원장)':''}`);
+        rec.qty=q2;rec.mes=mesv;rec.src=src;rec.ua=now();upd++;
+        if(cz&&cz.worker&&!rec.w1)rec.w1=cz.worker;
+        if(rec.spm&&(+rec.work-+(rec.brk||0)-+rec.stop)<Math.round(q2/rec.spm)*0.5){rec.work=+(rec.brk||0)+ +rec.stop+Math.round(q2/rec.spm)}
       })});
     if(upd){meName();logAdd('실마감 동기화',`${from}~${to} · ${upd}건 갱신`);commit();}
-    alert(`실마감 동기화 (${from} ~ ${to})\n\n원장 ${days}일 · 갱신 ${upd}건 · 동일 ${same}건 · 일보 없음 ${miss}건`+(changes.length?'\n\n'+changes.slice(0,20).join('\n')+(changes.length>20?`\n… 외 ${changes.length-20}건`:''):''));
+    alert(`실마감 동기화 (${from} ~ ${to})\n\n대상 ${days}일 · 갱신 ${upd}건 (모니터링 ${nClo} · 원장 ${nLed}) · 동일 ${same}건 · 일보 없음 ${miss}건`
+      +(errs.length?'\n\n※ '+errs.join('\n'):'')
+      +(changes.length?'\n\n'+changes.slice(0,20).join('\n')+(changes.length>20?`\n… 외 ${changes.length-20}건`:''):''));
   }catch(e){alert('동기화 실패: '+e.message)}
 }
 
