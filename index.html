@@ -234,7 +234,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
   <a data-pg="master"><i>⚙</i>기준정보</a>
   <a data-pg="data"><i>⇅</i>데이터 관리</a>
   <a data-pg="help"><i>?</i>사용안내</a>
-  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v15.3</div>
+  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v15.5</div>
 </nav>
 <main>
   <div class="top">
@@ -390,7 +390,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
       <div>
         <div class="panel"><h3>SPM 표준 <span class="muted" style="font-weight:400;font-size:12px" id="spmCnt"></span></h3>
           <p class="muted" style="font-size:12px;margin:0 0 8px">설비×품번 표준 SPM입니다. 일보 입력·MES 불러오기에서 SPM을 자동으로 채우는 데 씁니다. 설비를 비우면 그 품번의 공통값이 됩니다.</p>
-          <div class="fl" style="margin-bottom:8px"><input id="sp_q" placeholder="설비·품번 검색" class="grow"><button class="s p" onclick="applySetStd()" title="설비별 세팅 표준서(다이하이트 기준표)의 최대 SPM을 일괄 적용합니다">세팅 표준서 적용</button><button class="s" onclick="restoreSpm()">기본값 복구</button><input id="sp_mc" list="dlMc" placeholder="설비(비우면 공통)" style="min-width:120px"><input id="sp_pn" placeholder="품번" style="min-width:120px"><input id="sp_v" type="number" placeholder="SPM" style="width:80px"><button class="p s" onclick="addSpm()">추가</button></div>
+          <div class="fl" style="margin-bottom:8px"><input id="sp_q" placeholder="설비·품번 검색" class="grow"><button class="s" onclick="cleanSpm()" title="세팅 표준서 등록분과 실제 일보에 쓰인 조합만 남기고 자동 생성분을 지웁니다">목록 정리</button><button class="s p" onclick="applySetStd()" title="설비별 세팅 표준서(다이하이트 기준표)의 최대 SPM을 일괄 적용합니다">세팅 표준서 적용</button><button class="s" onclick="restoreSpm()">기본값 복구</button><input id="sp_mc" list="dlMc" placeholder="설비(비우면 공통)" style="min-width:120px"><input id="sp_pn" placeholder="품번" style="min-width:120px"><input id="sp_v" type="number" placeholder="SPM" style="width:80px"><button class="p s" onclick="addSpm()">추가</button></div>
           <div class="tw" style="max-height:52vh"><table id="tSpm"></table></div>
           <datalist id="dlMc"></datalist></div>
         <div class="panel"><h3>MES 설비코드 연결</h3>
@@ -403,8 +403,8 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
         <button class="p" onclick="saveMaster()">기준정보 저장</button>
         <button onclick="backupMaster()">기준정보 백업(JSON)</button>
         <button onclick="pull(1)">서버에서 다시 불러오기</button>
-        <button onclick="adminOn()" id="btnAdmin">관리자 인증</button>
-        <button onclick="setPin()">관리 PIN 설정</button>
+        
+        
         <button onclick="localStorage.setItem('tj_me','');meName();renderMaster()">내 이름 변경</button>
         <span class="grow"></span>
         <span class="muted" id="mstMsg">고친 내용은 자동 저장되지만, 확실히 해두려면 저장을 눌러 서버에 바로 올리세요</span>
@@ -1876,6 +1876,27 @@ async function syncClose(){
 
 /* 설비별 세팅 표준서 (다이하이트 기준표) — [mc, pn, 최대SPM, 최소SPM] */
 const SETSTD=[["01 쌍용200","1888-0005",25.0,20.0],["01 쌍용200","1969-0030-01",35.0,30.0],["01 쌍용200","1976-0004-01",35.0,30.0],["01 쌍용200","1979-0051-01",35.0,30.0],["01 쌍용200","45524-26210",25.0,25.0],["01 쌍용200","45624-2F010-L",25.0,25.0],["01 쌍용200","45624-2F010-U",25.0,25.0],["01 쌍용200","45631-26010",25.0,25.0],["01 쌍용200","48338-2H010",25.0,25.0],["02 심팩200","45524-26210",25.0,25.0],["02 심팩200","45624-2F010-L",25.0,25.0],["02 심팩200","45624-2F010-U",25.0,25.0],["02 심팩200","45631-26010",25.0,25.0],["02 심팩200","48338-2H010",25.0,25.0],["03 심팩150","1515-196",50.0,45.0],["03 심팩150","1968-0016-02",40.0,35.0],["04 심팩150","1945-349-2",30.0,25.0],["04 심팩150","1958-365-1",40.0,35.0],["04 심팩150","1960-0031-21",30.0,25.0],["05 심팩110","1982-371",25.0,25.0],["06 심팩110","1862-651",35.0,30.0],["06 심팩110","1945-349-1",40.0,35.0],["06 심팩110","1970-363",40.0,35.0],["06 심팩110","1970-372-1",40.0,35.0],["06 심팩110","1982-371",30.0,25.0],["28 국일250","1515-196",40.0,35.0],["29 국일200","1515-196",40.0,35.0],["30 국일160","1951-386",35.0,30.0],["31 심팩150","1858-619",40.0,35.0],["31 심팩150","1862-651",30.0,25.0],["31 심팩150","1952-0056-21",30.0,20.0],["31 심팩150","1960-0031-21",30.0,25.0],["31 심팩150","1963-0055-02",30.0,25.0],["32 심팩200","1861-596",40.0,35.0],["32 심팩200","1951-386",40.0,35.0],["32 심팩200","1967-391",40.0,35.0],["33 심팩250","1781-0001-00",35.0,30.0],["33 심팩250","1946-0053-01",35.0,30.0],["33 심팩250","1960-0031-01",30.0,25.0],["33 심팩250","1962-0030",35.0,30.0],["33 심팩250","1963-0055-01",30.0,25.0],["33 심팩250","1967-391",35.0,30.0],["33 심팩250","1968-0016-01",35.0,30.0],["33 심팩250","1969-0030-01",35.0,30.0],["33 심팩250","1972-383(2호금형)",35.0,30.0],["34 심팩250","1888-0005",25.0,20.0],["34 심팩250","1946-0053-01",35.0,30.0],["34 심팩250","1960-0031-01",35.0,30.0],["34 심팩250","1962-0030",35.0,30.0],["34 심팩250","1967-391",40.0,35.0],["34 심팩250","1968-0016-01",30.0,25.0],["34 심팩250","1969-0030-01",35.0,30.0],["34 심팩250","1976-0004-01",35.0,30.0],["34 심팩250","1979-0051-01",35.0,30.0],["35 심팩250","1946-0053-01",40.0,35.0],["35 심팩250","1960-0031-01",35.0,30.0],["35 심팩250","1962-0030",40.0,35.0],["35 심팩250","1969-0030-01",35.0,30.0],["35 심팩250","1979-0051-01",35.0,30.0],["36 심팩300","IW/OW-BDA-1106-1",40.0,35.0],["36 심팩300","IW/OW-BDA-1106-2",40.0,35.0],["36 심팩300","IW/OW-BDA-1106-3",40.0,35.0],["36 심팩300","IW/OW-BDA-1113-1",40.0,35.0],["36 심팩300","IW/OW-BDA-1113-2",40.0,35.0],["36 심팩300","IW/OW-BDA-1113D",40.0,35.0],["36 심팩300","IW/OW-BDA-1165A",40.0,35.0],["36 심팩300","IW/OW-BDA-1179-1",40.0,35.0],["36 심팩300","IW/OW-BDA-1179-2",40.0,35.0],["36 심팩300","IW/OW-BDA-1179-3",40.0,35.0],["37 국일200","1551-189",35.0,30.0],["37 국일200","1781-0001-00",35.0,30.0],["37 국일200","1861-596",35.0,30.0],["37 국일200","1862-651",35.0,30.0],["37 국일200","1952-367-2",30.0,25.0],["37 국일200","1958-365-2",30.0,25.0],["37 국일200","1963-0055-01",30.0,25.0],["37 국일200","1967-391",35.0,30.0],["37 국일200","1969-0030-01",35.0,30.0],["38 국일250","1952-0056-01",30.0,25.0],["38 국일250","1972-383(2호금형)",35.0,30.0],["39 국일250","1960-0031-01",35.0,30.0],["40 심팩200","1551-189",40.0,35.0],["40 심팩200","1970-372-2",40.0,35.0],["41 국일200","1861-596",40.0,35.0],["41 국일200","1946-0053-01",40.0,35.0],["41 국일200","1952-0056-01",30.0,25.0],["41 국일200","1952-367-2",35.0,30.0],["41 국일200","1972-383(2호금형)",40.0,35.0],["42 AIDA200","1952-367-2",50.0,50.0],["43 화일800","54610-C1000",22.0,18.0],["43 화일800","54610-D3000",18.0,16.0],["43 화일800","54610-D3500",22.0,18.0],["45 심팩300","IW/OW-BDA-1106-1",40.0,35.0],["45 심팩300","IW/OW-BDA-1106-2",40.0,35.0],["45 심팩300","IW/OW-BDA-1106-3",40.0,35.0],["45 심팩300","IW/OW-BDA-1113-1",40.0,35.0],["45 심팩300","IW/OW-BDA-1113-2",40.0,35.0],["45 심팩300","IW/OW-BDA-1113D",40.0,35.0],["45 심팩300","IW/OW-BDA-1159B",40.0,35.0],["45 심팩300","IW/OW-BDA-1179-1",40.0,35.0],["45 심팩300","IW/OW-BDA-1179-2",40.0,35.0],["45 심팩300","IW/OW-BDA-1179-3",40.0,35.0],["46 심팩300","AB3248-SC-01",24.0,22.0],["46 심팩300","IW/OW-BDA-1106-1",40.0,35.0],["46 심팩300","IW/OW-BDA-1106-2",40.0,35.0],["46 심팩300","IW/OW-BDA-1106-3",40.0,35.0],["46 심팩300","IW/OW-BDA-1113-1",40.0,35.0],["46 심팩300","IW/OW-BDA-1113-2",40.0,35.0],["46 심팩300","IW/OW-BDA-1113D",40.0,35.0],["46 심팩300","IW/OW-BDA-1159B",40.0,35.0],["46 심팩300","IW/OW-BDA-1165A",40.0,35.0],["46 심팩300","IW/OW-BDA-1179-1",40.0,38.0],["46 심팩300","IW/OW-BDA-1179-2",40.0,35.0],["46 심팩300","IW/OW-BDA-1179-3",40.0,38.0],["47 심팩300","IW/OW-BDA-1106-1",40.0,35.0],["47 심팩300","IW/OW-BDA-1106-2",40.0,35.0],["47 심팩300","IW/OW-BDA-1106-3",40.0,35.0],["47 심팩300","IW/OW-BDA-1113-1",40.0,35.0],["47 심팩300","IW/OW-BDA-1113-2",40.0,35.0],["47 심팩300","IW/OW-BDA-1113D",40.0,35.0],["47 심팩300","IW/OW-BDA-1159B",40.0,35.0],["47 심팩300","IW/OW-BDA-1165A",40.0,35.0],["47 심팩300","IW/OW-BDA-1179-1",40.0,35.0],["47 심팩300","IW/OW-BDA-1179-2",40.0,35.0],["47 심팩300","IW/OW-BDA-1179-3",40.0,35.0],["48 심팩300","IW/OW-BDA-1106-1",40.0,35.0],["48 심팩300","IW/OW-BDA-1106-2",40.0,35.0],["48 심팩300","IW/OW-BDA-1106-3",40.0,35.0],["48 심팩300","IW/OW-BDA-1113-1",40.0,35.0],["48 심팩300","IW/OW-BDA-1113-2",40.0,35.0],["48 심팩300","IW/OW-BDA-1113D",40.0,35.0],["48 심팩300","IW/OW-BDA-1159B",40.0,35.0],["48 심팩300","IW/OW-BDA-1165A",40.0,35.0],["48 심팩300","IW/OW-BDA-1179-2",40.0,35.0],["49 심팩300","IW/OW-BDA-1179-3",34.0,34.0]];
+/* SPM 표준 정리 — 세팅 표준서 + 실제 일보에 쓰인 조합만 남긴다 */
+function cleanSpm(){
+  const db=S.master.spmdb||[];
+  const std=new Set(SETSTD.map(([mc,pn])=>mc+'|'+pn));
+  const used=new Set(S.recs.map(r=>r.mc+'|'+r.pn));
+  const keep=[],drop=[];
+  db.forEach(x=>{
+    const k=(x.mc||'')+'|'+x.pn;
+    if(!x.mc){keep.push(x);return}                 // 공통행(설비 비움)은 유지
+    (std.has(k)||used.has(k)?keep:drop).push(x);
+  });
+  if(!drop.length){alert('정리할 항목이 없습니다.');return}
+  const byMc={};drop.forEach(x=>{byMc[x.mc]=(byMc[x.mc]||0)+1});
+  const list=Object.entries(byMc).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k} ${v}건`);
+  if(!confirm(`SPM 표준 정리\n\n현재 ${db.length}건 → ${keep.length}건 (${drop.length}건 삭제)\n\n남기는 것: 세팅 표준서 등록분 + 실제 일보에 쓰인 조합 + 공통행\n지우는 것: 사용 이력이 없는 자동 생성분\n\n${list.slice(0,12).join(' · ')}${list.length>12?' 외':''}\n\n진행할까요?`))return;
+  S.master.spmdb=keep;
+  logAdd('SPM 표준 정리',`${db.length} → ${keep.length}건 (${drop.length}건 삭제)`);
+  commit();renderMaster();
+  alert(`SPM 표준을 ${keep.length}건으로 정리했습니다. (${drop.length}건 삭제)`);
+}
+
 function applySetStd(){
   if(!askPin('세팅 표준서 SPM 일괄 적용'))return;
   const use=confirm('세팅 표준서의 최대 SPM을 적용합니다.\n\n확인 = 최대값 (예 35~40 → 40)\n취소 = 최소값 (예 35~40 → 35)');
@@ -1896,37 +1917,14 @@ function applySetStd(){
 /* 단발 설비 — 이전에 SPM 없이 저장한 이력이 있으면 단발로 본다 */
 function singleMc(mc){return S.recs.some(r=>r.mc===mc&&!(+r.spm))}
 
-/* ===== 관리 PIN · 변경 이력 ===== */
-function hash4(s){let h=0;for(const c of String(s))h=(h*31+c.charCodeAt(0))>>>0;return h.toString(36)}
+/* ===== 변경 이력 ===== */
 function meName(){
   let v=localStorage.getItem('tj_me')||'';
   if(!v){v=(prompt('이름을 입력하세요 (변경 이력에 남습니다)')||'').trim();if(v)localStorage.setItem('tj_me',v)}
   return v||'(이름없음)';
 }
-function setPin(){
-  const cur=S.master.pin;
-  if(cur){const a=prompt('현재 PIN을 입력하세요');if(a===null)return;if(hash4(a)!==cur){toast('PIN이 맞지 않습니다');return}}
-  const n=prompt(cur?'새 PIN(숫자 4자리 이상)':'관리 PIN을 새로 만듭니다 (숫자 4자리 이상)');
-  if(!n)return;
-  if(String(n).trim().length<4){toast('4자리 이상 입력하세요');return}
-  S.master.pin=hash4(String(n).trim());logAdd('PIN 변경','');commit();toast('PIN을 설정했습니다');
-}
-let adminUntil=0;                       // 관리자 인증 유지 시간 (10분)
-const ADMIN_MIN=10;
-function isAdmin(){return Date.now()<adminUntil}
-function adminOff(){adminUntil=0;renderMaster();toast('관리자 잠금')}
-function askPin(what){
-  if(!S.master.pin){toast('먼저 관리 PIN을 만들어 주세요');setPin();return false}
-  meName();
-  if(isAdmin())return true;
-  const a=prompt((what?what+'\n\n':'')+'관리자 PIN을 입력하세요 (인증 후 '+ADMIN_MIN+'분간 유지)');
-  if(a===null)return false;
-  if(hash4(String(a).trim())!==S.master.pin){toast('PIN이 맞지 않습니다 · 삭제할 수 없습니다');logAdd('PIN 오류',what||'');commit();return false}
-  adminUntil=Date.now()+ADMIN_MIN*60000;
-  logAdd('관리자 인증','');commit();
-  return true;
-}
-function adminOn(){if(askPin(''))renderMaster();}
+// 관리 PIN 사용 안 함 — 작업은 바로 실행되고 변경 이력에만 기록된다
+function askPin(what){meName();return true;}
 function logAdd(act,detail){
   S.log=S.log||[];
   S.log.unshift({t:now(),by:localStorage.getItem('tj_me')||'(이름없음)',act,d:String(detail||'').slice(0,120)});
@@ -1945,13 +1943,12 @@ function renderMaster(){
   $('tItems').innerHTML='<tr><th>고객사</th><th>품번</th><th>품명</th><th class=num>SPM 표준</th><th class=num>일보수</th><th></th></tr>'+m.items.slice().sort((a,b)=>a.cust.localeCompare(b.cust,'ko')||a.pn.localeCompare(b.pn,'ko',{numeric:true})).map(i=>{const n=S.recs.filter(r=>r.pn===i.pn).length;return `<tr><td><input value="${esc(i.cust)}" list="dlC" onchange="upItemCust('${esc(i.pn)}',this.value)" placeholder="고객사" style="min-width:110px;padding:3px 6px"></td><td><input value="${esc(i.pn)}" onchange="upItemPn('${esc(i.pn)}',this.value)" style="min-width:120px;padding:3px 6px"></td><td><input value="${esc(i.name)}" onchange="upItem('${esc(i.pn)}','name',this.value)" style="padding:3px 6px"></td><td class=num>${(()=>{const L=(S.master.spmdb||[]).filter(x=>x.pn===i.pn&&x.mc).map(x=>+x.spm).filter(Boolean);
       if(!L.length)return '<span class=muted>미등록</span>';
       const mn=Math.min(...L),mx=Math.max(...L);
-      return `<span class="muted" title="설비별 SPM 표준">${mn===mx?mn:mn+'~'+mx} <small>(${L.length}대)</small></span>`})()}</td><td class=num>${n}</td><td><button class="s d" onclick="delItem('${esc(i.pn)}')" title="관리자 PIN 필요">삭제</button></td></tr>`}).join('');
+      return `<span class="muted" title="설비별 SPM 표준">${mn===mx?mn:mn+'~'+mx} <small>(${L.length}대)</small></span>`})()}</td><td class=num>${n}</td><td><button class="s d" onclick="delItem('${esc(i.pn)}')">삭제</button></td></tr>`}).join('');
   $('lMc').innerHTML=m.mcs.slice().sort((a,b)=>a.localeCompare(b,'ko',{numeric:true})).map(v=>`<span class=chip>${esc(v)} <a onclick="delM('mcs','${esc(v)}')" style="cursor:pointer;color:var(--red)">×</a></span>`).join('');
   $('lW').innerHTML=m.workers.map(v=>`<span class=chip>${esc(v)} <a onclick="delM('workers','${esc(v)}')" style="cursor:pointer;color:var(--red)">×</a></span>`).join('');
   if($('itemCnt'))$('itemCnt').textContent=`${m.items.length}종 · 설비 ${m.mcs.length}대 · 작업자 ${m.workers.length}명`;
   renderSpm();renderLog();
-  const ba=$('btnAdmin');
-  if(ba){const on=isAdmin();ba.textContent=on?'관리자 인증됨 · 잠그기':'관리자 인증';ba.className=on?'p':'';ba.setAttribute('onclick',on?'adminOff()':'adminOn()')}
+
   const codes=[...new Set(Object.keys(S.master.mesMc||{}))].sort();
   const mcs=m.mcs.slice().sort((a,b)=>a.localeCompare(b,'ko',{numeric:true}));
   $('tMesMc').innerHTML='<tr><th>MES 설비코드</th><th>우리 설비</th></tr>'+codes.map(c=>`<tr><td>${esc(c)}</td><td><select onchange="setMesMc('${esc(c)}',this.value)" style="padding:3px 6px"><option value=""></option>${mcs.map(v=>`<option value="${esc(v)}"${v===S.master.mesMc[c]?' selected':''}>${esc(v)}</option>`).join('')}</select></td></tr>`).join('');
