@@ -181,6 +181,13 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
   .kpi b{font-size:22px}
   .form{grid-template-columns:repeat(2,1fr)}
   .form .c3,.form .c6{grid-column:span 2}
+  /* 모바일: 생산이력을 새 일보 위로 (필터 → 생산이력 → 새 일보 → 버튼) */
+  #pg-entry.on{display:flex;flex-direction:column}
+  #pg-entry #p-filter{order:1}
+  #pg-entry #p-hist{order:2}
+  #pg-entry #p-form{order:3}
+  #pg-entry #p-act{order:4}
+  #pg-entry #p-hist .tw{max-height:38vh}
   .readout{grid-template-columns:repeat(2,1fr)}
   .readout div b{font-size:22px}
   .hb{grid-template-columns:90px 1fr 50px}
@@ -228,7 +235,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
   <a data-pg="master"><i>⚙</i>기준정보</a>
   <a data-pg="data"><i>⇅</i>데이터 관리</a>
   <a data-pg="help"><i>?</i>사용안내</a>
-  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v14.4</div>
+  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v14.5</div>
 </nav>
 <main>
   <div class="top">
@@ -253,7 +260,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
   <!-- 생산일보 (입력 + 이력) -->
   <section class="pg" id="pg-entry">
     <!-- 1. 불러오기 · 필터 -->
-    <div class="panel">
+    <div class="panel" id="p-filter">
       <div class="fl">
         <button class="p" onclick="openMes()">MES 실적 불러오기</button><button onclick="syncClose()" title="이미 저장된 일보의 실적을 모니터링 서버 마감 수량으로 한 번에 맞춥니다">실마감 동기화</button><button class="s" onclick="mesDiag()">연결 점검</button>
         <span style="width:8px"></span>
@@ -269,7 +276,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
     </div>
 
     <!-- 2. 일보 입력 -->
-    <div class="panel">
+    <div class="panel" id="p-form">
       <div class="fl" style="margin-bottom:12px"><h3 id="entryTitle" style="margin:0">새 일보</h3><span class="grow"></span><button class="s" onclick="copyPrev()">전일 동일설비 불러오기</button></div>
       <div class="form">
         <div><label>생산일자</label><input type="date" id="f_date"></div>
@@ -297,13 +304,13 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
     </div>
 
     <!-- 3. 생산이력(DB) -->
-    <div class="panel">
-      <h3 style="margin-bottom:8px">생산이력 (줄을 클릭하면 위 입력란으로 불러옵니다)</h3>
+    <div class="panel" id="p-hist">
+      <h3 style="margin-bottom:8px">생산이력 <span class="muted" style="font-weight:400;font-size:12px">(줄을 클릭하면 입력란으로 불러옵니다)</span></h3>
       <div class="tw" style="max-height:46vh"><table id="tHist"></table></div>
     </div>
 
     <!-- 4. 실행 버튼 -->
-    <div class="panel act">
+    <div class="panel act" id="p-act">
       <div class="fl">
         <button class="p" onclick="saveRec()" id="btnSave">저장 (Ctrl+Enter)</button>
         <button onclick="newRec()">신규작성</button>
@@ -784,7 +791,10 @@ function editRec(id){const r=S.recs.find(x=>x.id===id);if(!r)return;editId=id;
   $('entryTitle').textContent='일보 수정 · '+r.date+' '+r.mc+' · '+r.pn;
   writeForm(r);if($('f_auto'))$('f_auto').checked=false;   // 저장된 일보는 정지시간을 그대로 유지
   $('btnSave').textContent='수정 저장 (Ctrl+Enter)';$('btnEdit').disabled=false;$('btnDel').disabled=false;
-  renderHist();window.scrollTo({top:0,behavior:'smooth'});}
+  renderHist();
+  const _pf=$('p-form');
+  if(_pf&&window.innerWidth<=900)_pf.scrollIntoView({behavior:'smooth',block:'start'});
+  else window.scrollTo({top:0,behavior:'smooth'});}
 function delRec(id){const r=S.recs.find(x=>x.id===id);if(!r)return;if(!askPin(`일보 삭제 · ${r.date} ${r.mc} ${r.pn} (실적 ${fmt(r.qty)})`))return;if(!confirm(r.date+' '+r.mc+' '+r.pn+' 일보를 삭제합니다. 계속할까요?'))return;S.recs=S.recs.filter(x=>x.id!==id);S.del[id]=now();logAdd('일보 삭제',r.date+' '+r.mc+' '+r.pn+' / 실적 '+r.qty);if(editId===id)resetForm(true);commit();toast('삭제했습니다');}
 function copyPrev(){const mc=$('f_mc').value,d=$('f_date').value;if(!mc){$('fmsg').textContent='설비를 먼저 선택하세요';return}
   const prev=S.recs.filter(r=>r.mc===mc&&r.date<d).sort((a,b)=>b.date.localeCompare(a.date))[0];
