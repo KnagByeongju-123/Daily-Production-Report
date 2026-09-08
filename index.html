@@ -295,7 +295,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
   <a data-pg="master"><i>⚙</i>기준정보</a>
   <a data-pg="data"><i>⇅</i>데이터 관리</a>
   <a data-pg="help"><i>?</i>사용안내</a>
-  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v16.2</div>
+  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v16.3</div>
 </nav>
 <main>
   <div class="top">
@@ -1901,9 +1901,40 @@ function showClo(d){
 }
 
 /* ===== 실마감 동기화: 저장된 일보 실적을 MES 원장(실마감 반영)과 맞춤 ===== */
+/* 실마감 자동 반영 — 오전 7시 이후, MES 자료가 갱신되면 저장된 일보를 조용히 맞춘다 */
+const AUTO_FROM_HOUR=7;      // 이 시각 이후에만 동작
+const AUTO_DAYS=10;          // 최근 며칠분을 살필지
+let autoBusy=false, autoLast=0;
+function kstHour(){return new Date(Date.now()+9*3600000).getUTCHours()}
+async function autoSync(force){
+  if(autoBusy)return; if(!force&&kstHour()<AUTO_FROM_HOUR)return;
+  if(!force&&Date.now()-autoLast<4*60*1000)return;      // 4분 안에는 다시 안 함
+  autoBusy=true;autoLast=Date.now();
+  try{
+    const to=today();
+    const d0=new Date(); d0.setDate(d0.getDate()-AUTO_DAYS);
+    const from=[d0.getFullYear(),String(d0.getMonth()+1).padStart(2,'0'),String(d0.getDate()).padStart(2,'0')].join('-');
+    const res=await syncRange(from<MES_FROM?MES_FROM:from, to, true);
+    if(res&&res.upd){
+      toast(`실마감 자동 반영 ${res.upd}건 (모니터링 ${res.nClo} · 원장 ${res.nLed})`);
+      logAdd('실마감 자동 반영',`${from}~${to} · ${res.upd}건`);
+      commit();renderAll();
+    }
+  }catch(e){}
+  autoBusy=false;
+}
+
 async function syncClose(){
   const from=prompt('실마감 동기화 시작일 (YYYY-MM-DD)',MES_FROM);if(!from)return;
   const to=prompt('종료일 (YYYY-MM-DD)',today());if(!to)return;
+  const r=await syncRange(from,to,false);
+  if(!r)return;
+  alert(`실마감 동기화 (${from} ~ ${to})\n\n대상 ${r.days}일 · 갱신 ${r.upd}건 (모니터링 ${r.nClo} · 원장 ${r.nLed}) · 동일 ${r.same}건 · 일보 없음 ${r.miss}건`
+    +(r.errs.length?'\n\n※ '+r.errs.join('\n'):'')
+    +(r.changes.length?'\n\n'+r.changes.slice(0,20).join('\n')+(r.changes.length>20?`\n… 외 ${r.changes.length-20}건`:''):''));
+}
+
+async function syncRange(from,to,quiet){
   const mcMap=S.master.mesMc||{};
   let upd=0,same=0,miss=0,days=0,nClo=0,nLed=0;const changes=[];const errs=[];
   try{
@@ -1941,11 +1972,9 @@ async function syncClose(){
         if(cz&&cz.worker&&!rec.w1)rec.w1=cz.worker;
         if(rec.spm&&(+rec.work-+(rec.brk||0)-+rec.stop)<Math.round(q2/rec.spm)*0.5){rec.work=+(rec.brk||0)+ +rec.stop+Math.round(q2/rec.spm)}
       })});
-    if(upd){meName();logAdd('실마감 동기화',`${from}~${to} · ${upd}건 갱신`);commit();}
-    alert(`실마감 동기화 (${from} ~ ${to})\n\n대상 ${days}일 · 갱신 ${upd}건 (모니터링 ${nClo} · 원장 ${nLed}) · 동일 ${same}건 · 일보 없음 ${miss}건`
-      +(errs.length?'\n\n※ '+errs.join('\n'):'')
-      +(changes.length?'\n\n'+changes.slice(0,20).join('\n')+(changes.length>20?`\n… 외 ${changes.length-20}건`:''):''));
-  }catch(e){alert('동기화 실패: '+e.message)}
+    if(upd&&!quiet){logAdd('실마감 동기화',`${from}~${to} · ${upd}건 갱신`);commit();}
+    return{days,upd,same,miss,nClo,nLed,changes,errs};
+  }catch(e){ if(!quiet)alert('동기화 실패: '+e.message); return null }
 }
 
 /* 설비별 세팅 표준서 (다이하이트 기준표) — [mc, pn, 최대SPM, 최소SPM] */
@@ -2207,8 +2236,9 @@ const _dm=dataMonths();if(_dm.length&&!S.recs.some(inMonth))month=_dm[0][0];
 $('f_date').value=today();
 fillSelectors();
 go('entry');
-pull();
-setInterval(()=>{if(!document.hidden)pull()},5*60*1000);
+pull().then(()=>setTimeout(()=>autoSync(),3000));
+setInterval(()=>{if(!document.hidden){pull().then(()=>setTimeout(()=>autoSync(),2000))}},5*60*1000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(()=>autoSync(),1500)});
 </script>
 </body>
 </html>
