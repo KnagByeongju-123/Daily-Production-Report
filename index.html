@@ -78,6 +78,12 @@ tr.sum td{background:#EEF2F7;font-weight:700;border-top:2px solid var(--line)}
 .tw{overflow:auto;max-height:70vh;border:1px solid var(--line);border-radius:6px;background:#fff}
 .tag{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:600;background:var(--steel2);color:var(--steel)}
 .tag.a{background:var(--amber2);color:#9A5A16}.tag.g{background:var(--green2);color:#1E6B41}.tag.r{background:var(--red2);color:#9C2F27}
+.tag.over{background:var(--red);color:#fff;font-weight:800;box-shadow:0 0 0 2px #F3BDB7}
+#r_eff.over,#r_oper.over{background:var(--red);color:#fff;font-weight:800;padding:1px 7px;border-radius:6px}
+.effwarn{margin:8px 0 2px;padding:10px 12px;border-radius:8px;background:#FBEEEC;border:1px solid #E9B4AE;color:#9C2F27;font-size:13px;line-height:1.55}
+tr.overrow td{background:#FEF6F5}
+.overbar{margin:0 0 10px;padding:10px 14px;border-radius:8px;background:var(--red);color:#fff;font-size:14px;font-weight:700}
+.overbar span{font-weight:400;opacity:.92}
 .bar{height:8px;background:var(--line2);border-radius:4px;overflow:hidden;min-width:60px}
 .bar i{display:block;height:100%;background:var(--steel)}
 .bar.a i{background:var(--amber)}.bar.r i{background:var(--red)}.bar.g i{background:var(--green)}
@@ -228,7 +234,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
   <a data-pg="master"><i>⚙</i>기준정보</a>
   <a data-pg="data"><i>⇅</i>데이터 관리</a>
   <a data-pg="help"><i>?</i>사용안내</a>
-  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v14.5</div>
+  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v14.8</div>
 </nav>
 <main>
   <div class="top">
@@ -239,6 +245,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
 
   <!-- 현황판 -->
   <section class="pg on" id="pg-dash">
+    <div id="dashOver" class="overbar" style="display:none"></div>
     <div class="grid g4" id="kpis"></div>
     <div class="grid g2" style="margin-top:14px">
       <div class="panel"><h3>일별 생산수량</h3><div id="chDay"></div></div>
@@ -293,12 +300,14 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
         <div class="c3"><label>정지사유</label><input id="f_sr" placeholder="예: 조회 금형점검 소재교환"><div class="chips" id="chips"></div></div>
         <div class="c3"><label>특기사항 (불량내용 등)</label><input id="f_note" placeholder="예: 시타발43 수리중불량15"></div>
       </div>
+      <div id="effWarn" class="effwarn" style="display:none"></div>
       <div class="fl" id="rline" style="font-size:12px;color:var(--muted);margin-top:2px"><span>가동 <b id="r_run">0</b>분</span><span>가능 <b id="r_cap">0</b> EA</span><span>가동율 <b id="r_oper">-</b></span><span>효율 <b id="r_eff">-</b></span></div>
     </div>
 
     <!-- 3. 생산이력(DB) -->
     <div class="panel">
       <h3 style="margin-bottom:8px">생산이력 (줄을 클릭하면 위 입력란으로 불러옵니다)</h3>
+      <div id="h_over" class="overbar noprint" style="display:none"></div>
       <div class="tw" style="max-height:46vh"><table id="tHist"></table></div>
     </div>
 
@@ -658,7 +667,10 @@ document.querySelectorAll('nav a').forEach(a=>a.onclick=()=>go(a.dataset.pg));
 function mv(d){const[y,m]=month.split('-').map(Number);const dt=new Date(y,m-1+d,1);month=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0');renderAll();}
 function opts(sel,list,cur,all){sel.innerHTML=(all?'<option value="">'+all+'</option>':'')+list.map(v=>'<option value="'+v+'"'+(v===cur?' selected':'')+'>'+v+'</option>').join('');}
 function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
-function cls(v){return v>=0.85?'g':v>=0.7?'':v>=0.6?'a':'r'}
+function cls(v){return v>1.0?'over':v>=0.85?'g':v>=0.7?'':v>=0.6?'a':'r'}
+function overMsg(r){const c=calc(r);if(!(c.eff>1))return '';
+  const need=Math.ceil((+r.qty||0)/(+r.spm||1));
+  return `실적 ${fmt(r.qty)}개는 SPM ${r.spm} 기준 가동 ${fmt(need)}분이 필요한데 기록된 가동은 ${fmt(c.run)}분입니다. SPM 표준 · 정지시간 · 실적 중 하나를 확인하세요.`;}
 
 function renderAll(){
   $('monLbl').textContent=month.replace('-','년 ')+'월';
@@ -672,6 +684,10 @@ function renderDash(){
   R.forEach(r=>{const c=calc(r);qty+=+r.qty||0;ng+=+r.ng||0;work+=+r.work||0;run+=c.run;cap+=c.cap});
   const oper=work?run/work:NaN,eff=cap?qty/cap:NaN,ngr=qty?ng/qty:0;
   const days=new Set(R.map(r=>r.date)).size;
+  const over=R.filter(r=>calc(r).eff>1).sort((a,b)=>calc(b).eff-calc(a).eff);
+  if($('dashOver')){$('dashOver').innerHTML=over.length
+    ?`⚠ 효율 100% 초과 ${over.length}건 <span>— ${over.slice(0,5).map(r=>`${r.date.slice(5)} ${esc(r.mc)} ${pct(calc(r).eff)}`).join(' · ')}${over.length>5?` 외 ${over.length-5}건`:''} · SPM 표준 또는 가동시간을 확인하세요</span>`:'';
+    $('dashOver').style.display=over.length?'':'none';}
   $('kpis').innerHTML=`
    <div class="kpi"><small>생산수량</small><b>${fmt(qty)}</b><em>${R.length}건 · ${days}일 · 가동 ${(run/60).toFixed(0)}H</em></div>
    <div class="kpi ${cls(oper)==='a'?'warn':cls(oper)==='r'?'bad':cls(oper)==='g'?'good':''}"><small>평균 가동율(가중)</small><b>${pct(oper)}</b><em>정지 ${(( work-run)/60).toFixed(1)}H / 근무 ${(work/60).toFixed(0)}H</em></div>
@@ -726,7 +742,7 @@ function renderEff(){
 function rowsTable(list,withEdit){
   const h='<tr><th>생산일자</th><th>설비</th><th>고객사</th><th>품번</th><th>품명</th><th>작업자</th><th class=num>SPM</th><th class=num>근무</th><th class=num>정지</th><th class=num>휴식</th><th class=num>가동</th><th class=num>가능</th><th class=num>실적</th><th class=num>가동율</th><th class=num>효율</th><th class=num>불량</th><th>정지사유</th><th>특기사항</th>'+(withEdit?'<th></th>':'')+'</tr>';
   if(!list.length)return h+'<tr><td colspan=19 class=empty>자료가 없습니다</td></tr>';
-  return h+list.map(r=>{const c=calc(r);return `<tr><td>${r.date}</td><td>${esc(r.mc)}</td><td><span class="tag">${esc(r.cust)}</span></td><td>${esc(r.pn)}</td><td class=muted>${esc(r.name)}</td><td>${esc(workers(r).join(','))}</td><td class=num>${r.spm}</td><td class=num>${r.work}</td><td class=num>${r.stop}</td><td class=num>${r.brk||''}</td><td class=num>${c.run}</td><td class=num>${fmt(c.cap)}</td><td class=num><b>${fmt(r.qty)}</b></td><td class=num><span class="tag ${cls(c.oper)}">${pct(c.oper)}</span></td><td class=num><span class="tag ${cls(c.eff)}">${pct(c.eff)}</span></td><td class=num>${r.ng||''}</td><td class=muted>${esc(r.sr)}</td><td class=muted>${esc(r.note)}</td>`+(withEdit?`<td><button class=s onclick="editRec('${r.id}')">수정</button> <button class="s d" onclick="delRec('${r.id}')">삭제</button></td>`:'')+'</tr>'}).join('');
+  return h+list.map(r=>{const c=calc(r);return `<tr class="${c.eff>1?'overrow':''}"><td>${r.date}</td><td>${esc(r.mc)}</td><td><span class="tag">${esc(r.cust)}</span></td><td>${esc(r.pn)}</td><td class=muted>${esc(r.name)}</td><td>${esc(workers(r).join(','))}</td><td class=num>${r.spm}</td><td class=num>${r.work}</td><td class=num>${r.stop}</td><td class=num>${r.brk||''}</td><td class=num>${c.run}</td><td class=num>${fmt(c.cap)}</td><td class=num><b>${fmt(r.qty)}</b></td><td class=num><span class="tag ${cls(c.oper)}">${pct(c.oper)}</span></td><td class=num><span class="tag ${cls(c.eff)}">${pct(c.eff)}</span></td><td class=num>${r.ng||''}</td><td class=muted>${esc(r.sr)}</td><td class=muted>${esc(r.note)}</td>`+(withEdit?`<td><button class=s onclick="editRec('${r.id}')">수정</button> <button class="s d" onclick="delRec('${r.id}')">삭제</button></td>`:'')+'</tr>'}).join('');
 }
 
 /* ===== 입력 ===== */
@@ -754,7 +770,11 @@ function onPn(){const it=S.master.items.find(i=>i.pn===$('f_pn').value);if(!it)r
   if(last&&!$('f_mc').value)$('f_mc').value=last.mc;
   if(last&&!$('f_w1').value)$('f_w1').value=last.w1||'';
   readout();}
-function readout(){const r=readForm();const c=calc(r);$('r_run').textContent=fmt(c.run);$('r_cap').textContent=fmt(c.cap);const o=$('r_oper'),e=$('r_eff');o.textContent=pct(c.oper);e.textContent=pct(c.eff);o.className=isFinite(c.oper)?cls(c.oper):'';e.className=isFinite(c.eff)?cls(c.eff):'';}
+function readout(){const r=readForm();const c=calc(r);$('r_run').textContent=fmt(c.run);$('r_cap').textContent=fmt(c.cap);
+  const o=$('r_oper'),e=$('r_eff');o.textContent=pct(c.oper);e.textContent=pct(c.eff);
+  o.className=isFinite(c.oper)?cls(c.oper):'';e.className=isFinite(c.eff)?cls(c.eff):'';
+  const w=$('effWarn');if(w){const m=overMsg(r);
+    w.innerHTML=m?`<b>⚠ 효율 ${pct(c.eff)} — 100% 초과</b><br>${esc(m)}`:'';w.style.display=m?'':'none';}}
 function readForm(){return{date:$('f_date').value,mc:$('f_mc').value,proc:$('f_proc').value.trim()||'P/R',cust:$('f_cust').value,pn:$('f_pn').value,name:$('f_name').value.trim(),w1:$('f_w1').value.trim(),w2:$('f_w2').value.trim(),w3:$('f_w3').value.trim(),w4:$('f_w4').value.trim(),spm:+$('f_spm').value||0,work:+$('f_work').value||0,stop:+$('f_stop').value||0,brk:+$('f_brk').value||0,qty:+$('f_qty').value||0,ng:+$('f_ng').value||0,ngp:+$('f_ngp').value||0,reg:+$('f_reg').value,sr:$('f_sr').value.trim(),note:$('f_note').value.trim()}}
 function writeForm(r){$('f_date').value=r.date;$('f_mc').value=r.mc;$('f_proc').value=r.proc||'P/R';$('f_cust').value=r.cust;fillPn(r.pn);$('f_pn').value=r.pn;$('f_name').value=r.name;['w1','w2','w3','w4'].forEach(k=>$('f_'+k).value=r[k]||'');$('f_spm').value=r.spm;$('f_work').value=r.work;$('f_stop').value=r.stop;$('f_brk').value=r.brk||'';$('f_qty').value=r.qty;$('f_ng').value=r.ng||'';$('f_ngp').value=r.ngp||'';$('f_reg').value=r.reg??1;$('f_sr').value=r.sr||'';$('f_note').value=r.note||'';readout();}
 function resetForm(keepDate){const d=keepDate?$('f_date').value:today();editId=null;$('entryTitle').textContent='새 일보';if($('btnSave')){$('btnSave').textContent='저장 (Ctrl+Enter)';$('btnEdit').disabled=true;$('btnDel').disabled=true}writeForm({date:d,mc:'',proc:'P/R',cust:'',pn:'',name:'',spm:'',work:'',stop:'',brk:'',qty:'',ng:'',reg:1,sr:'',note:''});$('fmsg').textContent='';renderEntry();}
@@ -1193,10 +1213,14 @@ function renderHist(){
     if(typeof x==='string')return x.localeCompare(y,'ko',{numeric:true})*sortDir;
     return ((x||0)-(y||0))*sortDir});
   let q=0,ng=0,work=0,run=0,cap=0;L.forEach(r=>{q+=+r.qty||0;ng+=+r.ng||0;work+=+r.work||0;run+=r.run;cap+=r.cap});
+  const over=L.filter(r=>r.eff>1);
+  if($('h_over')){$('h_over').innerHTML=over.length
+    ?`⚠ 효율 100% 초과 ${over.length}건 <span>— ${over.slice(0,4).map(r=>`${r.date.slice(5)} ${esc(r.mc)} ${pct(r.eff)}`).join(' · ')}${over.length>4?` 외 ${over.length-4}건`:''} · SPM 표준 또는 가동시간을 확인하세요</span>`:'';
+    $('h_over').style.display=over.length?'':'none';}
   $('h_sum').textContent=`${L.length}건 · 생산 ${fmt(q)} EA · 가동율 ${pct(run/work)} · 효율 ${pct(q/cap)} · 불량 ${fmt(ng)}`;
   const cols=[['date','생산일자'],['mc','설비'],['cust','고객사'],['pn','품번'],['name','품명'],['w1','작업자'],['spm','SPM',1],['work','근무',1],['stop','정지',1],['brk','휴식',1],['run','가동',1],['cap','가능',1],['qty','실적',1],['mes','조정수량',1],['oper','가동율',1],['eff','효율',1],['ng','불량',1],['sr','정지사유'],['note','특기사항']];
   const h='<tr>'+cols.map(c=>`<th class="sort ${c[2]?'num':''} ${sortKey===c[0]?(sortDir>0?'asc':'desc'):''}" onclick="sortBy('${c[0]}')">${c[1]}</th>`).join('')+'<th></th></tr>';
-  $('tHist').innerHTML=h+(L.length?L.map(r=>`<tr class="${r.id===editId?'sel':''}" onclick="editRec('${r.id}')"><td>${r.date}</td><td>${esc(r.mc)}</td><td><span class="tag">${esc(r.cust)}</span></td><td>${esc(r.pn)}</td><td class=muted>${esc(r.name)}</td><td>${esc(workers(r).join(','))}</td><td class=num>${r.spm}</td><td class=num>${r.work}</td><td class=num>${r.stop}</td><td class=num>${r.brk||''}</td><td class=num>${r.run}</td><td class=num>${fmt(r.cap)}</td><td class=num><b>${fmt(r.qty)}</b></td><td class=num>${(()=>{if(!r.mes)return'';const d=+r.qty-+r.mes;
+  $('tHist').innerHTML=h+(L.length?L.map(r=>`<tr class="${r.id===editId?'sel':''} ${r.eff>1?'overrow':''}" onclick="editRec('${r.id}')"><td>${r.date}</td><td>${esc(r.mc)}</td><td><span class="tag">${esc(r.cust)}</span></td><td>${esc(r.pn)}</td><td class=muted>${esc(r.name)}</td><td>${esc(workers(r).join(','))}</td><td class=num>${r.spm}</td><td class=num>${r.work}</td><td class=num>${r.stop}</td><td class=num>${r.brk||''}</td><td class=num>${r.run}</td><td class=num>${fmt(r.cap)}</td><td class=num><b>${fmt(r.qty)}</b></td><td class=num>${(()=>{if(!r.mes)return'';const d=+r.qty-+r.mes;
       if(!d)return'<span class=muted>일치</span>';
       return `<b style="color:${d>0?'var(--green)':'var(--red)'}">${d>0?'+':'−'}${fmt(Math.abs(d))}</b><br><span class=muted style="font-size:11px">MES ${fmt(r.mes)}</span>`})()}</td><td class=num><span class="tag ${cls(r.oper)}">${pct(r.oper)}</span></td><td class=num><span class="tag ${cls(r.eff)}">${pct(r.eff)}</span></td><td class=num>${r.ng||''}</td><td class=muted>${esc(r.sr)}</td><td class=muted>${esc(r.note)}</td><td><button class="s d" onclick="event.stopPropagation();delRec('${r.id}')">삭제</button></td></tr>`).join('')+`<tr class=sum><td colspan=7>합계 ${L.length}건</td><td class=num>${fmt(work)}</td><td class=num>${fmt(work-run)}</td><td></td><td class=num>${fmt(run)}</td><td class=num>${fmt(cap)}</td><td class=num>${fmt(q)}</td><td></td><td class=num>${pct(run/work)}</td><td class=num>${pct(q/cap)}</td><td class=num>${fmt(ng)}</td><td colspan=3></td></tr>`:'<tr><td colspan=20 class=empty>조건에 맞는 일보가 없습니다</td></tr>');
 }
