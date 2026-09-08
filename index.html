@@ -234,7 +234,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
   <a data-pg="master"><i>⚙</i>기준정보</a>
   <a data-pg="data"><i>⇅</i>데이터 관리</a>
   <a data-pg="help"><i>?</i>사용안내</a>
-  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v15.6</div>
+  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v15.7</div>
 </nav>
 <main>
   <div class="top">
@@ -390,7 +390,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
       <div>
         <div class="panel"><h3>SPM 표준 <span class="muted" style="font-weight:400;font-size:12px" id="spmCnt"></span></h3>
           <p class="muted" style="font-size:12px;margin:0 0 8px">설비×품번 표준 SPM입니다. 일보 입력·MES 불러오기에서 SPM을 자동으로 채우는 데 씁니다. 설비를 비우면 그 품번의 공통값이 됩니다.</p>
-          <div class="fl" style="margin-bottom:8px"><input id="sp_q" placeholder="설비·품번 검색" class="grow"><button class="s" onclick="cleanSpm()" title="세팅 표준서 등록분과 실제 일보에 쓰인 조합만 남기고 자동 생성분을 지웁니다">목록 정리</button><button class="s p" onclick="applySetStd()" title="설비별 세팅 표준서(다이하이트 기준표)의 최대 SPM을 일괄 적용합니다">세팅 표준서 적용</button><button class="s" onclick="restoreSpm()">기본값 복구</button><input id="sp_mc" list="dlMc" placeholder="설비(비우면 공통)" style="min-width:120px"><input id="sp_pn" placeholder="품번" style="min-width:120px"><input id="sp_v" type="number" placeholder="SPM" style="width:80px"><button class="p s" onclick="addSpm()">추가</button></div>
+          <div class="fl" style="margin-bottom:8px"><input id="sp_q" placeholder="설비·품번 검색" class="grow"><button class="s" onclick="spmCsvOut()" title="현재 SPM 표준 전체를 CSV로 내려받습니다">CSV 내려받기</button><button class="s" onclick="spmCsvPick()" title="설비,품번,SPM 3열 CSV를 읽어 일괄 등록합니다">CSV 올리기</button><input type="file" id="spmCsvFile" accept=".csv,text/csv" style="display:none" onchange="spmCsvIn(this.files[0])"><button class="s" onclick="cleanSpm()" title="세팅 표준서 등록분과 실제 일보에 쓰인 조합만 남기고 자동 생성분을 지웁니다">목록 정리</button><button class="s p" onclick="applySetStd()" title="설비별 세팅 표준서(다이하이트 기준표)의 최대 SPM을 일괄 적용합니다">세팅 표준서 적용</button><button class="s" onclick="restoreSpm()">기본값 복구</button><input id="sp_mc" list="dlMc" placeholder="설비(비우면 공통)" style="min-width:120px"><input id="sp_pn" placeholder="품번" style="min-width:120px"><input id="sp_v" type="number" placeholder="SPM" style="width:80px"><button class="p s" onclick="addSpm()">추가</button></div>
           <div class="tw" style="max-height:52vh"><table id="tSpm"></table></div>
           <datalist id="dlMc"></datalist></div>
         <div class="panel"><h3>MES 설비코드 연결</h3>
@@ -1876,6 +1876,54 @@ async function syncClose(){
 
 /* 설비별 세팅 표준서 (다이하이트 기준표) — [mc, pn, 최대SPM, 최소SPM] */
 const SETSTD=[["01 쌍용200","1888-0005",25.0,20.0],["01 쌍용200","1969-0030-01",35.0,30.0],["01 쌍용200","1976-0004-01",35.0,30.0],["01 쌍용200","1979-0051-01",35.0,30.0],["01 쌍용200","45524-26210",25.0,25.0],["01 쌍용200","45624-2F010-L",25.0,25.0],["01 쌍용200","45624-2F010-U",25.0,25.0],["01 쌍용200","45631-26010",25.0,25.0],["01 쌍용200","48338-2H010",25.0,25.0],["02 심팩200","45524-26210",25.0,25.0],["02 심팩200","45624-2F010-L",25.0,25.0],["02 심팩200","45624-2F010-U",25.0,25.0],["02 심팩200","45631-26010",25.0,25.0],["02 심팩200","48338-2H010",25.0,25.0],["03 심팩150","1515-196",50.0,45.0],["03 심팩150","1968-0016-02",40.0,35.0],["04 심팩150","1945-349-2",30.0,25.0],["04 심팩150","1958-365-1",40.0,35.0],["04 심팩150","1960-0031-21",30.0,25.0],["05 심팩110","1982-371",25.0,25.0],["06 심팩110","1862-651",35.0,30.0],["06 심팩110","1945-349-1",40.0,35.0],["06 심팩110","1970-363",40.0,35.0],["06 심팩110","1970-372-1",40.0,35.0],["06 심팩110","1982-371",30.0,25.0],["28 국일250","1515-196",40.0,35.0],["29 국일200","1515-196",40.0,35.0],["30 국일160","1951-386",35.0,30.0],["31 심팩150","1858-619",40.0,35.0],["31 심팩150","1862-651",30.0,25.0],["31 심팩150","1952-0056-21",30.0,20.0],["31 심팩150","1960-0031-21",30.0,25.0],["31 심팩150","1963-0055-02",30.0,25.0],["32 심팩200","1861-596",40.0,35.0],["32 심팩200","1951-386",40.0,35.0],["32 심팩200","1967-391",40.0,35.0],["33 심팩250","1781-0001-00",35.0,30.0],["33 심팩250","1946-0053-01",35.0,30.0],["33 심팩250","1960-0031-01",30.0,25.0],["33 심팩250","1962-0030",35.0,30.0],["33 심팩250","1963-0055-01",30.0,25.0],["33 심팩250","1967-391",35.0,30.0],["33 심팩250","1968-0016-01",35.0,30.0],["33 심팩250","1969-0030-01",35.0,30.0],["33 심팩250","1972-383(2호금형)",35.0,30.0],["34 심팩250","1888-0005",25.0,20.0],["34 심팩250","1946-0053-01",35.0,30.0],["34 심팩250","1960-0031-01",35.0,30.0],["34 심팩250","1962-0030",35.0,30.0],["34 심팩250","1967-391",40.0,35.0],["34 심팩250","1968-0016-01",30.0,25.0],["34 심팩250","1969-0030-01",35.0,30.0],["34 심팩250","1976-0004-01",35.0,30.0],["34 심팩250","1979-0051-01",35.0,30.0],["35 심팩250","1946-0053-01",40.0,35.0],["35 심팩250","1960-0031-01",35.0,30.0],["35 심팩250","1962-0030",40.0,35.0],["35 심팩250","1969-0030-01",35.0,30.0],["35 심팩250","1979-0051-01",35.0,30.0],["36 심팩300","IW/OW-BDA-1106-1",40.0,35.0],["36 심팩300","IW/OW-BDA-1106-2",40.0,35.0],["36 심팩300","IW/OW-BDA-1106-3",40.0,35.0],["36 심팩300","IW/OW-BDA-1113-1",40.0,35.0],["36 심팩300","IW/OW-BDA-1113-2",40.0,35.0],["36 심팩300","IW/OW-BDA-1113D",40.0,35.0],["36 심팩300","IW/OW-BDA-1165A",40.0,35.0],["36 심팩300","IW/OW-BDA-1179-1",40.0,35.0],["36 심팩300","IW/OW-BDA-1179-2",40.0,35.0],["36 심팩300","IW/OW-BDA-1179-3",40.0,35.0],["37 국일200","1551-189",35.0,30.0],["37 국일200","1781-0001-00",35.0,30.0],["37 국일200","1861-596",35.0,30.0],["37 국일200","1862-651",35.0,30.0],["37 국일200","1952-367-2",30.0,25.0],["37 국일200","1958-365-2",30.0,25.0],["37 국일200","1963-0055-01",30.0,25.0],["37 국일200","1967-391",35.0,30.0],["37 국일200","1969-0030-01",35.0,30.0],["38 국일250","1952-0056-01",30.0,25.0],["38 국일250","1972-383(2호금형)",35.0,30.0],["39 국일250","1960-0031-01",35.0,30.0],["40 심팩200","1551-189",40.0,35.0],["40 심팩200","1970-372-2",40.0,35.0],["41 국일200","1861-596",40.0,35.0],["41 국일200","1946-0053-01",40.0,35.0],["41 국일200","1952-0056-01",30.0,25.0],["41 국일200","1952-367-2",35.0,30.0],["41 국일200","1972-383(2호금형)",40.0,35.0],["42 AIDA200","1952-367-2",50.0,50.0],["43 화일800","54610-C1000",22.0,18.0],["43 화일800","54610-D3000",18.0,16.0],["43 화일800","54610-D3500",22.0,18.0],["45 심팩300","IW/OW-BDA-1106-1",40.0,35.0],["45 심팩300","IW/OW-BDA-1106-2",40.0,35.0],["45 심팩300","IW/OW-BDA-1106-3",40.0,35.0],["45 심팩300","IW/OW-BDA-1113-1",40.0,35.0],["45 심팩300","IW/OW-BDA-1113-2",40.0,35.0],["45 심팩300","IW/OW-BDA-1113D",40.0,35.0],["45 심팩300","IW/OW-BDA-1159B",40.0,35.0],["45 심팩300","IW/OW-BDA-1179-1",40.0,35.0],["45 심팩300","IW/OW-BDA-1179-2",40.0,35.0],["45 심팩300","IW/OW-BDA-1179-3",40.0,35.0],["46 심팩300","AB3248-SC-01",24.0,22.0],["46 심팩300","IW/OW-BDA-1106-1",40.0,35.0],["46 심팩300","IW/OW-BDA-1106-2",40.0,35.0],["46 심팩300","IW/OW-BDA-1106-3",40.0,35.0],["46 심팩300","IW/OW-BDA-1113-1",40.0,35.0],["46 심팩300","IW/OW-BDA-1113-2",40.0,35.0],["46 심팩300","IW/OW-BDA-1113D",40.0,35.0],["46 심팩300","IW/OW-BDA-1159B",40.0,35.0],["46 심팩300","IW/OW-BDA-1165A",40.0,35.0],["46 심팩300","IW/OW-BDA-1179-1",40.0,38.0],["46 심팩300","IW/OW-BDA-1179-2",40.0,35.0],["46 심팩300","IW/OW-BDA-1179-3",40.0,38.0],["47 심팩300","IW/OW-BDA-1106-1",40.0,35.0],["47 심팩300","IW/OW-BDA-1106-2",40.0,35.0],["47 심팩300","IW/OW-BDA-1106-3",40.0,35.0],["47 심팩300","IW/OW-BDA-1113-1",40.0,35.0],["47 심팩300","IW/OW-BDA-1113-2",40.0,35.0],["47 심팩300","IW/OW-BDA-1113D",40.0,35.0],["47 심팩300","IW/OW-BDA-1159B",40.0,35.0],["47 심팩300","IW/OW-BDA-1165A",40.0,35.0],["47 심팩300","IW/OW-BDA-1179-1",40.0,35.0],["47 심팩300","IW/OW-BDA-1179-2",40.0,35.0],["47 심팩300","IW/OW-BDA-1179-3",40.0,35.0],["48 심팩300","IW/OW-BDA-1106-1",40.0,35.0],["48 심팩300","IW/OW-BDA-1106-2",40.0,35.0],["48 심팩300","IW/OW-BDA-1106-3",40.0,35.0],["48 심팩300","IW/OW-BDA-1113-1",40.0,35.0],["48 심팩300","IW/OW-BDA-1113-2",40.0,35.0],["48 심팩300","IW/OW-BDA-1113D",40.0,35.0],["48 심팩300","IW/OW-BDA-1159B",40.0,35.0],["48 심팩300","IW/OW-BDA-1165A",40.0,35.0],["48 심팩300","IW/OW-BDA-1179-2",40.0,35.0],["49 심팩300","IW/OW-BDA-1179-3",34.0,34.0]];
+/* SPM 표준 — CSV 내려받기 / 올리기 */
+function spmCsvOut(){
+  const rows=[['설비','품번','SPM','출처']];
+  (S.master.spmdb||[]).slice()
+    .sort((a,b)=>(a.mc||'').localeCompare(b.mc||'','ko',{numeric:true})||String(a.pn).localeCompare(String(b.pn),'ko',{numeric:true}))
+    .forEach(x=>rows.push([x.mc||'',x.pn,x.spm,x.src||'']));
+  const csv='\uFEFF'+rows.map(r=>r.map(v=>{v=String(v??'');return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}).join(',')).join('\r\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download='SPM표준_'+today()+'.csv';a.click();URL.revokeObjectURL(a.href);
+  toast(`${(S.master.spmdb||[]).length}건을 CSV로 내려받았습니다`);
+}
+function spmCsvPick(){$('spmCsvFile').click()}
+function spmCsvIn(file){
+  if(!file)return;
+  const fr=new FileReader();
+  fr.onload=()=>{
+    try{
+      let txt=String(fr.result||'').replace(/^\uFEFF/,'');
+      const lines=txt.split(/\r?\n/).filter(l=>l.trim());
+      if(!lines.length){alert('내용이 없습니다.');return}
+      const cut=l=>{const out=[];let cur='',q=false;
+        for(let i=0;i<l.length;i++){const c=l[i];
+          if(q){if(c==='"'){if(l[i+1]==='"'){cur+='"';i++}else q=false}else cur+=c}
+          else if(c==='"')q=true; else if(c===','){out.push(cur);cur=''} else cur+=c}
+        out.push(cur);return out.map(s=>s.trim())};
+      let start=0;const h=cut(lines[0]).map(s=>s.replace(/\s/g,''));
+      if(h[0]==='설비'||h.includes('품번'))start=1;
+      const db=S.master.spmdb=S.master.spmdb||[];
+      let add=0,upd=0,same=0,bad=0;const errs=[];
+      lines.slice(start).forEach((l,i)=>{
+        const c=cut(l);if(c.length<3){bad++;return}
+        const mc=(c[0]||'').replace(/^공통$/,'').trim(), pn=(c[1]||'').trim(), spm=+c[2];
+        if(!pn||!isFinite(spm)||spm<0){bad++;if(errs.length<5)errs.push(`${start+i+1}행: ${l.slice(0,40)}`);return}
+        const f=db.find(x=>(x.mc||'')===mc&&x.pn===pn);
+        if(f){ if(+f.spm===spm){same++} else {f.spm=spm;f.src='CSV';upd++} }
+        else{ db.push({mc,pn,spm,src:'CSV'});add++ }
+      });
+      logAdd('SPM CSV 등록',`추가 ${add} · 갱신 ${upd} · 동일 ${same} · 오류 ${bad}`);
+      commit();renderMaster();
+      alert(`SPM 표준 CSV 등록\n\n추가 ${add}건 · 갱신 ${upd}건 · 동일 ${same}건 · 건너뜀 ${bad}건`
+        +(errs.length?'\n\n[형식 오류]\n'+errs.join('\n'):''));
+    }catch(e){alert('읽지 못했습니다: '+e.message)}
+    $('spmCsvFile').value='';
+  };
+  fr.readAsText(file,'utf-8');
+}
+
 /* SPM 표준 정리 — 세팅 표준서 + 실제 일보에 쓰인 조합만 남긴다 */
 function cleanSpm(){
   const db=S.master.spmdb||[];
