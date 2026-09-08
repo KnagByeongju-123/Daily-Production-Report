@@ -234,7 +234,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
   <a data-pg="master"><i>⚙</i>기준정보</a>
   <a data-pg="data"><i>⇅</i>데이터 관리</a>
   <a data-pg="help"><i>?</i>사용안내</a>
-  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v15.5</div>
+  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v15.6</div>
 </nav>
 <main>
   <div class="top">
@@ -405,7 +405,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
         <button onclick="pull(1)">서버에서 다시 불러오기</button>
         
         
-        <button onclick="localStorage.setItem('tj_me','');meName();renderMaster()">내 이름 변경</button>
+        <button onclick="changeMe()">내 이름 변경</button>
         <span class="grow"></span>
         <span class="muted" id="mstMsg">고친 내용은 자동 저장되지만, 확실히 해두려면 저장을 눌러 서버에 바로 올리세요</span>
       </div>
@@ -1918,13 +1918,12 @@ function applySetStd(){
 function singleMc(mc){return S.recs.some(r=>r.mc===mc&&!(+r.spm))}
 
 /* ===== 변경 이력 ===== */
-function meName(){
-  let v=localStorage.getItem('tj_me')||'';
-  if(!v){v=(prompt('이름을 입력하세요 (변경 이력에 남습니다)')||'').trim();if(v)localStorage.setItem('tj_me',v)}
-  return v||'(이름없음)';
-}
+// 이름은 물어보지 않는다. [내 이름 변경]에서 직접 설정한다
+function changeMe(){const v=prompt('이름을 입력하세요 (변경 이력에 남습니다)',localStorage.getItem('tj_me')||'');
+  if(v===null)return;localStorage.setItem('tj_me',v.trim());renderMaster();toast(v.trim()?'이름을 '+v.trim()+'(으)로 저장했습니다':'이름을 지웠습니다');}
+function meName(){return (localStorage.getItem('tj_me')||'').trim()||'(이름없음)';}
 // 관리 PIN 사용 안 함 — 작업은 바로 실행되고 변경 이력에만 기록된다
-function askPin(what){meName();return true;}
+function askPin(what){return true;}
 function logAdd(act,detail){
   S.log=S.log||[];
   S.log.unshift({t:now(),by:localStorage.getItem('tj_me')||'(이름없음)',act,d:String(detail||'').slice(0,120)});
