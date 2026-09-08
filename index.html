@@ -234,7 +234,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
   <a data-pg="master"><i>⚙</i>기준정보</a>
   <a data-pg="data"><i>⇅</i>데이터 관리</a>
   <a data-pg="help"><i>?</i>사용안내</a>
-  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v15.7</div>
+  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v15.8</div>
 </nav>
 <main>
   <div class="top">
@@ -389,7 +389,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
       </div>
       <div>
         <div class="panel"><h3>SPM 표준 <span class="muted" style="font-weight:400;font-size:12px" id="spmCnt"></span></h3>
-          <p class="muted" style="font-size:12px;margin:0 0 8px">설비×품번 표준 SPM입니다. 일보 입력·MES 불러오기에서 SPM을 자동으로 채우는 데 씁니다. 설비를 비우면 그 품번의 공통값이 됩니다.</p>
+          <p class="muted" style="font-size:12px;margin:0 0 8px">품번별 표준 SPM입니다. <b>설비를 비우면 그 품번의 공통값</b>이 되고, 설비마다 속도가 다른 품번만 설비를 지정해 예외로 등록합니다. 찾는 순서 : ① 설비 지정 표준 → ② 공통값 → ③ 같은 설비 최근 일보</p>
           <div class="fl" style="margin-bottom:8px"><input id="sp_q" placeholder="설비·품번 검색" class="grow"><button class="s" onclick="spmCsvOut()" title="현재 SPM 표준 전체를 CSV로 내려받습니다">CSV 내려받기</button><button class="s" onclick="spmCsvPick()" title="설비,품번,SPM 3열 CSV를 읽어 일괄 등록합니다">CSV 올리기</button><input type="file" id="spmCsvFile" accept=".csv,text/csv" style="display:none" onchange="spmCsvIn(this.files[0])"><button class="s" onclick="cleanSpm()" title="세팅 표준서 등록분과 실제 일보에 쓰인 조합만 남기고 자동 생성분을 지웁니다">목록 정리</button><button class="s p" onclick="applySetStd()" title="설비별 세팅 표준서(다이하이트 기준표)의 최대 SPM을 일괄 적용합니다">세팅 표준서 적용</button><button class="s" onclick="restoreSpm()">기본값 복구</button><input id="sp_mc" list="dlMc" placeholder="설비(비우면 공통)" style="min-width:120px"><input id="sp_pn" placeholder="품번" style="min-width:120px"><input id="sp_v" type="number" placeholder="SPM" style="width:80px"><button class="p s" onclick="addSpm()">추가</button></div>
           <div class="tw" style="max-height:52vh"><table id="tSpm"></table></div>
           <datalist id="dlMc"></datalist></div>
@@ -855,13 +855,13 @@ $('f_pn').addEventListener('change',onPn);
 function spmFor(mc,pn){
   if(!pn)return 0;
   const db=S.master.spmdb||[];
+  const sd=db.find(x=>x.pn===pn&&x.mc===mc); if(sd)return sd.spm;   // ① SPM 표준(설비 지정) — 예외
+  const nomc=db.find(x=>x.pn===pn&&!x.mc); if(nomc)return nomc.spm; // ② SPM 표준(공통값) — 기본
   const last=S.recs.filter(r=>r.pn===pn&&r.mc===mc).sort((a,b)=>b.date.localeCompare(a.date))[0];
-  if(last&&last.spm)return last.spm;                       // ① 같은 설비·품번 최근 실적
-  const sd=db.find(x=>x.pn===pn&&x.mc===mc); if(sd)return sd.spm;   // ② SPM 표준(설비·품번)
-  const any=db.filter(x=>x.pn===pn&&x.mc);                 // ③ 다른 설비 표준값 중 최빈값
+  if(last&&last.spm)return last.spm;                       // ③ 같은 설비·품번 최근 일보
+  const any=db.filter(x=>x.pn===pn&&x.mc);                 // ④ 다른 설비 표준값 중 최빈값
   if(any.length){const c={};any.forEach(x=>c[x.spm]=(c[x.spm]||0)+1);
     return +Object.entries(c).sort((a,b)=>b[1]-a[1])[0][0]}
-  const nomc=db.find(x=>x.pn===pn&&!x.mc); if(nomc)return nomc.spm; // ④ 설비 무관 표준
   return 0;   // 품목 마스터 기본SPM은 사용하지 않는다 — SPM 표준 한 곳에서 관리
 }
 $('f_mc').addEventListener('change',()=>{const s=spmFor($('f_mc').value,$('f_pn').value);if(s){$('f_spm').value=s;readout()}});
