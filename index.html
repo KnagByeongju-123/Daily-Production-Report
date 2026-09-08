@@ -234,7 +234,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
   <a data-pg="master"><i>⚙</i>기준정보</a>
   <a data-pg="data"><i>⇅</i>데이터 관리</a>
   <a data-pg="help"><i>?</i>사용안내</a>
-  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v15.1</div>
+  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v15.2</div>
 </nav>
 <main>
   <div class="top">
@@ -370,8 +370,8 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
 
   <!-- 기준정보 -->
   <section class="pg" id="pg-master">
-    <div class="panel"><h3>품목 마스터 <span class="muted">(고객사 · 품번 · 품명 · 기본SPM)</span> <span class="muted" style="font-weight:400;font-size:12px" id="itemCnt"></span></h3>
-        <div class="fl" style="margin-bottom:8px"><input id="mi_cust" list="dlC" placeholder="고객사" style="min-width:110px"><input id="mi_pn" placeholder="품번"><input id="mi_name" placeholder="품명" class="grow"><input id="mi_spm" type="number" placeholder="SPM" style="min-width:70px;width:80px"><button class="p s" onclick="addItem()">추가</button></div>
+    <div class="panel"><h3>품목 마스터 <span class="muted">(고객사 · 품번 · 품명) — SPM은 아래 <b>SPM 표준</b>에서 설비별로 관리합니다</span> <span class="muted" style="font-weight:400;font-size:12px" id="itemCnt"></span></h3>
+        <div class="fl" style="margin-bottom:8px"><input id="mi_cust" list="dlC" placeholder="고객사" style="min-width:110px"><input id="mi_pn" placeholder="품번"><input id="mi_name" placeholder="품명" class="grow"><button class="p s" onclick="addItem()">추가</button></div>
         <div class="tw" style="max-height:60vh"><table id="tItems"></table></div>
     </div>
 
@@ -767,7 +767,7 @@ function fillPn(keep){
 function chip(r){const e=$('f_sr');const parts=e.value.trim().split(/\s+/).filter(Boolean);const i=parts.indexOf(r);if(i>=0)parts.splice(i,1);else parts.push(r);e.value=parts.join(' ');}
 function onPn(){const it=S.master.items.find(i=>i.pn===$('f_pn').value);if(!it)return;$('f_name').value=it.name;if(!$('f_cust').value)$('f_cust').value=it.cust;
   const last=S.recs.filter(r=>r.pn===it.pn).sort((a,b)=>b.date.localeCompare(a.date))[0];
-  if(!$('f_spm').value)$('f_spm').value=spmFor($('f_mc').value,it.pn)||last?.spm||it.spm||'';
+  if(!$('f_spm').value)$('f_spm').value=spmFor($('f_mc').value,it.pn)||last?.spm||'';
   $('fmsg').textContent=$('f_spm').value?'':'이 설비·품번의 SPM 표준이 없습니다. SPM을 입력하면 다음부터 자동으로 채워집니다.';
   if($('f_brk').value===''){const lc=S.recs.filter(r=>r.cust===(it.cust||$('f_cust').value)).sort((a,b)=>b.date.localeCompare(a.date))[0];$('f_brk').value=lc?(lc.brk||0):0}
   if(last&&!$('f_mc').value)$('f_mc').value=last.mc;
@@ -794,7 +794,7 @@ function saveRec(cont){
   r.ua=now();r.by=localStorage.getItem('tj_me')||'';
   // 작업자 마스터 자동 추가
   workers(r).forEach(w=>{if(!S.master.workers.includes(w))S.master.workers.push(w)});
-  if(!S.master.items.find(i=>i.pn===r.pn))S.master.items.push({pn:r.pn,name:r.name,cust:r.cust,spm:r.spm});
+  if(!S.master.items.find(i=>i.pn===r.pn))S.master.items.push({pn:r.pn,name:r.name,cust:r.cust});
   if(r.spm){S.master.spmdb=S.master.spmdb||[];if(!S.master.spmdb.find(x=>x.mc===r.mc&&x.pn===r.pn))S.master.spmdb.push({mc:r.mc,pn:r.pn,spm:r.spm});}
   if(editId){const i=S.recs.findIndex(x=>x.id===editId);S.recs[i]={...S.recs[i],...r};toast('수정했습니다');}
   else{
@@ -862,7 +862,7 @@ function spmFor(mc,pn){
   if(any.length){const c={};any.forEach(x=>c[x.spm]=(c[x.spm]||0)+1);
     return +Object.entries(c).sort((a,b)=>b[1]-a[1])[0][0]}
   const nomc=db.find(x=>x.pn===pn&&!x.mc); if(nomc)return nomc.spm; // ④ 설비 무관 표준
-  const it=S.master.items.find(i=>i.pn===pn); return it&&it.spm?it.spm:0;
+  return 0;   // 품목 마스터 기본SPM은 사용하지 않는다 — SPM 표준 한 곳에서 관리
 }
 $('f_mc').addEventListener('change',()=>{const s=spmFor($('f_mc').value,$('f_pn').value);if(s){$('f_spm').value=s;readout()}});
 $('f_cust').addEventListener('change',()=>{fillPn();});
@@ -1923,7 +1923,10 @@ function renderLog(){
 function mdel(t,v){S.master.mdel=S.master.mdel||{};S.master.mdel[t+'|'+v]=now();}
 function renderMaster(){
   const m=S.master;
-  $('tItems').innerHTML='<tr><th>고객사</th><th>품번</th><th>품명</th><th class=num>SPM</th><th class=num>일보수</th><th></th></tr>'+m.items.slice().sort((a,b)=>a.cust.localeCompare(b.cust,'ko')||a.pn.localeCompare(b.pn,'ko',{numeric:true})).map(i=>{const n=S.recs.filter(r=>r.pn===i.pn).length;return `<tr><td><input value="${esc(i.cust)}" list="dlC" onchange="upItemCust('${esc(i.pn)}',this.value)" placeholder="고객사" style="min-width:110px;padding:3px 6px"></td><td><input value="${esc(i.pn)}" onchange="upItemPn('${esc(i.pn)}',this.value)" style="min-width:120px;padding:3px 6px"></td><td><input value="${esc(i.name)}" onchange="upItem('${esc(i.pn)}','name',this.value)" style="padding:3px 6px"></td><td><input type=number value="${i.spm||''}" onchange="upItem('${esc(i.pn)}','spm',+this.value)" style="width:70px;padding:3px 6px"></td><td class=num>${n}</td><td><button class="s d" onclick="delItem('${esc(i.pn)}')" title="관리자 PIN 필요">삭제</button></td></tr>`}).join('');
+  $('tItems').innerHTML='<tr><th>고객사</th><th>품번</th><th>품명</th><th class=num>SPM 표준</th><th class=num>일보수</th><th></th></tr>'+m.items.slice().sort((a,b)=>a.cust.localeCompare(b.cust,'ko')||a.pn.localeCompare(b.pn,'ko',{numeric:true})).map(i=>{const n=S.recs.filter(r=>r.pn===i.pn).length;return `<tr><td><input value="${esc(i.cust)}" list="dlC" onchange="upItemCust('${esc(i.pn)}',this.value)" placeholder="고객사" style="min-width:110px;padding:3px 6px"></td><td><input value="${esc(i.pn)}" onchange="upItemPn('${esc(i.pn)}',this.value)" style="min-width:120px;padding:3px 6px"></td><td><input value="${esc(i.name)}" onchange="upItem('${esc(i.pn)}','name',this.value)" style="padding:3px 6px"></td><td class=num>${(()=>{const L=(S.master.spmdb||[]).filter(x=>x.pn===i.pn&&x.mc).map(x=>+x.spm).filter(Boolean);
+      if(!L.length)return '<span class=muted>미등록</span>';
+      const mn=Math.min(...L),mx=Math.max(...L);
+      return `<span class="muted" title="설비별 SPM 표준">${mn===mx?mn:mn+'~'+mx} <small>(${L.length}대)</small></span>`})()}</td><td class=num>${n}</td><td><button class="s d" onclick="delItem('${esc(i.pn)}')" title="관리자 PIN 필요">삭제</button></td></tr>`}).join('');
   $('lMc').innerHTML=m.mcs.slice().sort((a,b)=>a.localeCompare(b,'ko',{numeric:true})).map(v=>`<span class=chip>${esc(v)} <a onclick="delM('mcs','${esc(v)}')" style="cursor:pointer;color:var(--red)">×</a></span>`).join('');
   $('lW').innerHTML=m.workers.map(v=>`<span class=chip>${esc(v)} <a onclick="delM('workers','${esc(v)}')" style="cursor:pointer;color:var(--red)">×</a></span>`).join('');
   if($('itemCnt'))$('itemCnt').textContent=`${m.items.length}종 · 설비 ${m.mcs.length}대 · 작업자 ${m.workers.length}명`;
@@ -1935,8 +1938,8 @@ function renderMaster(){
   $('tMesMc').innerHTML='<tr><th>MES 설비코드</th><th>우리 설비</th></tr>'+codes.map(c=>`<tr><td>${esc(c)}</td><td><select onchange="setMesMc('${esc(c)}',this.value)" style="padding:3px 6px"><option value=""></option>${mcs.map(v=>`<option value="${esc(v)}"${v===S.master.mesMc[c]?' selected':''}>${esc(v)}</option>`).join('')}</select></td></tr>`).join('');
   $('lR').innerHTML=m.reasons.map(v=>`<span class=chip>${esc(v)} <a onclick="delM('reasons','${esc(v)}')" style="cursor:pointer;color:var(--red)">×</a></span>`).join('');
 }
-function addItem(){const cu=$('mi_cust').value.trim(),pn=$('mi_pn').value.trim(),nm=$('mi_name').value.trim(),spm=+$('mi_spm').value||'';if(!cu||!pn){toast('고객사와 품번을 입력하세요');return}if(S.master.items.find(i=>i.pn===pn)){toast('이미 있는 품번입니다');return}
-  S.master.items.push({pn,name:nm,cust:cu,spm});if(!S.master.custs.includes(cu))S.master.custs.push(cu);delete (S.master.mdel||{})['item|'+pn];['mi_cust','mi_pn','mi_name','mi_spm'].forEach(i=>$(i).value='');commit();toast('추가했습니다');}
+function addItem(){const cu=$('mi_cust').value.trim(),pn=$('mi_pn').value.trim(),nm=$('mi_name').value.trim(),spm='';if(!cu||!pn){toast('고객사와 품번을 입력하세요');return}if(S.master.items.find(i=>i.pn===pn)){toast('이미 있는 품번입니다');return}
+  S.master.items.push({pn,name:nm,cust:cu,spm});if(!S.master.custs.includes(cu))S.master.custs.push(cu);delete (S.master.mdel||{})['item|'+pn];['mi_cust','mi_pn','mi_name'].forEach(i=>$(i).value='');commit();toast('추가했습니다');}
 function upItem(pn,k,v){const it=S.master.items.find(i=>i.pn===pn);if(it){it[k]=v;commit()}}
 function upItemCust(pn,v){
   v=(v||'').trim();const it=S.master.items.find(i=>i.pn===pn);if(!it)return;
