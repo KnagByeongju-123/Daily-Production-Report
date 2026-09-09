@@ -288,7 +288,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
   <a data-pg="master"><i>⚙</i>기준정보</a>
   <a data-pg="data"><i>⇅</i>데이터 관리</a>
   <a data-pg="help"><i>?</i>사용안내</a>
-  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v16.9</div>
+  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v17.0</div>
 </nav>
 <main>
   <div class="top">
@@ -2296,10 +2296,13 @@ function renderLog(){
 function mdel(t,v){S.master.mdel=S.master.mdel||{};S.master.mdel[t+'|'+v]=now();}
 function renderMaster(){
   const m=S.master;
-  $('tItems').innerHTML='<tr><th>고객사</th><th>품번</th><th>품명</th><th class=num>SPM 표준</th><th class=num>일보수</th><th></th></tr>'+m.items.slice().sort((a,b)=>a.cust.localeCompare(b.cust,'ko')||a.pn.localeCompare(b.pn,'ko',{numeric:true})).map(i=>{const n=S.recs.filter(r=>r.pn===i.pn).length;return `<tr><td><input value="${esc(i.cust)}" list="dlC" onchange="upItemCust('${esc(i.pn)}',this.value)" placeholder="고객사" style="min-width:110px;padding:3px 6px"></td><td><input value="${esc(i.pn)}" onchange="upItemPn('${esc(i.pn)}',this.value)" style="min-width:120px;padding:3px 6px"></td><td><input value="${esc(i.name)}" onchange="upItem('${esc(i.pn)}','name',this.value)" style="padding:3px 6px"></td><td class=num>${(()=>{const L=(S.master.spmdb||[]).filter(x=>x.pn===i.pn&&x.mc).map(x=>+x.spm).filter(Boolean);
-      if(!L.length)return '<span class=muted>미등록</span>';
-      const mn=Math.min(...L),mx=Math.max(...L);
-      return `<span class="muted" title="설비별 SPM 표준">${mn===mx?mn:mn+'~'+mx} <small>(${L.length}대)</small></span>`})()}</td><td class=num>${n}</td><td><button class="s d" onclick="delItem('${esc(i.pn)}')">삭제</button></td></tr>`}).join('');
+  $('tItems').innerHTML='<tr><th>고객사</th><th>품번</th><th>품명</th><th class=num>SPM 표준</th><th class=num>일보수</th><th></th></tr>'+m.items.slice().sort((a,b)=>a.cust.localeCompare(b.cust,'ko')||a.pn.localeCompare(b.pn,'ko',{numeric:true})).map(i=>{const n=S.recs.filter(r=>r.pn===i.pn).length;return `<tr><td><input value="${esc(i.cust)}" list="dlC" onchange="upItemCust('${esc(i.pn)}',this.value)" placeholder="고객사" style="min-width:110px;padding:3px 6px"></td><td><input value="${esc(i.pn)}" onchange="upItemPn('${esc(i.pn)}',this.value)" style="min-width:120px;padding:3px 6px"></td><td><input value="${esc(i.name)}" onchange="upItem('${esc(i.pn)}','name',this.value)" style="padding:3px 6px"></td><td class=num>${(()=>{const db=S.master.spmdb||[];
+      const com=db.find(x=>x.pn===i.pn&&!x.mc);
+      const exc=db.filter(x=>x.pn===i.pn&&x.mc);
+      if(!com&&!exc.length)return '<span class=muted>미등록</span>';
+      const c=com?`공통 <b>${com.spm}</b>`:'<span class=muted>공통 없음</span>';
+      const e=exc.length?` · <span class="muted" title="${esc(exc.map(x=>x.mc+' = '+x.spm).join(', '))}">예외 ${exc.length}대</span>`:'';
+      return c+e})()}</td><td class=num>${n}</td><td><button class="s d" onclick="delItem('${esc(i.pn)}')">삭제</button></td></tr>`}).join('');
   $('lMc').innerHTML=m.mcs.slice().sort((a,b)=>a.localeCompare(b,'ko',{numeric:true})).map(v=>`<span class=chip>${esc(v)} <a onclick="delM('mcs','${esc(v)}')" style="cursor:pointer;color:var(--red)">×</a></span>`).join('');
   $('lW').innerHTML=m.workers.map(v=>`<span class=chip>${esc(v)} <a onclick="delM('workers','${esc(v)}')" style="cursor:pointer;color:var(--red)">×</a></span>`).join('');
   if($('itemCnt'))$('itemCnt').textContent=`${m.items.length}종 · 설비 ${m.mcs.length}대 · 작업자 ${m.workers.length}명`;
@@ -2350,7 +2353,12 @@ function renderSpm(){
   $('spmCnt').textContent=`${db.length}건 · 설비 ${new Set(db.map(x=>x.mc).filter(Boolean)).size}대 · 품번 ${new Set(db.map(x=>x.pn)).size}종`;
   $('dlMc').innerHTML=S.master.mcs.map(v=>`<option value="${esc(v)}">`).join('');
   $('tSpm').innerHTML='<tr><th>설비</th><th>품번</th><th class=num>SPM</th><th></th></tr>'
-   +(L.length?L.map(x=>`<tr><td>${x.mc?esc(x.mc):'<span class=muted>공통</span>'}</td><td>${esc(x.pn)}</td><td><input type=number value="${x.spm}" onchange="upSpm(${x.i},this.value)" style="width:70px;padding:3px 6px"></td><td><button class="s d" onclick="delSpm(${x.i})">삭제</button></td></tr>`).join('')
+   +(L.length?L.map(x=>{
+      const exc=db.filter(y=>y.pn===x.pn&&y.mc&&+y.spm!==+x.spm);
+      const note=!x.mc&&exc.length
+        ? `<span class="tag a" title="이 설비들은 예외값이 우선합니다">예외 ${exc.length}대 우선</span>`
+        : (x.mc?'<span class="tag" style="background:#EEF2F7">예외</span>':'');
+      return `<tr><td>${x.mc?esc(x.mc):'<span class=muted>공통</span>'} ${note}</td><td>${esc(x.pn)}</td><td><input type=number value="${x.spm}" onchange="upSpm(${x.i},this.value)" style="width:70px;padding:3px 6px"></td><td><button class="s d" onclick="delSpm(${x.i})">삭제</button></td></tr>`}).join('')
      :'<tr><td colspan=4 class=empty>해당 항목이 없습니다</td></tr>');
 }
 function addSpm(){const mc=$('sp_mc').value.trim(),pn=$('sp_pn').value.trim(),v=+$('sp_v').value||0;
@@ -2365,6 +2373,14 @@ function upSpm(i,v){
   const x=S.master.spmdb[i];if(!x)return;
   const old=+x.spm||0, nv=+v||0;
   x.spm=nv;commit();
+  if(!x.mc){ // 공통값을 고친 경우 — 설비 지정 예외가 있으면 그쪽이 우선한다
+    const exc=(S.master.spmdb||[]).filter(y=>y.pn===x.pn&&y.mc&&+y.spm!==nv);
+    if(exc.length&&confirm(`공통값을 ${nv}로 바꿨습니다.\n\n다만 아래 설비는 예외값이 따로 있어 공통값이 적용되지 않습니다.\n${exc.map(y=>`  ${y.mc} = ${y.spm}`).join('\n')}\n\n예외를 지우고 모두 ${nv}로 통일할까요?\n(취소 = 예외 유지)`)){
+      exc.forEach(y=>{const i2=S.master.spmdb.indexOf(y);if(i2>=0)S.master.spmdb.splice(i2,1)});
+      logAdd('SPM 예외 삭제',`${x.pn} · ${exc.map(y=>y.mc+'='+y.spm).join(', ')}`);
+      commit();renderMaster();
+    }
+  }
   if(nv&&nv!==old)applySpmToRecs(x.mc,x.pn,nv,old);
 }
 /* 표준 SPM을 고치면 저장된 일보에도 반영할지 묻는다 */
