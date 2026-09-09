@@ -288,7 +288,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
   <a data-pg="master"><i>⚙</i>기준정보</a>
   <a data-pg="data"><i>⇅</i>데이터 관리</a>
   <a data-pg="help"><i>?</i>사용안내</a>
-  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v16.7</div>
+  <div class="foot"><span id="sync">저장 상태 확인 중</span><br><span id="cnt"></span><br>v16.9</div>
 </nav>
 <main>
   <div class="top">
@@ -504,6 +504,11 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
         <div class="fl"><button id="btnAutoEntry" onclick="setAutoEntry(!autoEntryOn())"></button>
           <button onclick="autoEntry(true)">지금 한 번 실행</button></div>
         <div id="autoEntryMsg" class="muted" style="margin-top:8px"></div>
+      </div>
+      <div class="panel"><h3>중복 일보 정리</h3>
+        <p class="muted">두 기기에서 같은 날짜를 동시에 저장하면 같은 설비·품번이 두 줄로 남을 수 있습니다. 한 줄만 남기고 정리합니다. (조정 → 마감 → MES 순, 같으면 최근 저장분)</p>
+        <button class="p" onclick="dedupeRecs()">중복 정리</button>
+        <div id="dupMsg" class="muted" style="margin-top:8px"></div>
       </div>
       <div class="panel"><h3>백업 · 복원</h3>
         <p class="muted">모든 일보와 기준정보를 JSON 파일 하나로 내려받거나 되돌립니다. 월 1회 백업을 권장합니다.</p>
@@ -723,7 +728,7 @@ async function pull(manual){
     const r=await fetch(SB_URL+'/rest/v1/kv_store?key=eq.'+KV_KEY+'&select=value',{headers:hdr});
     if(!r.ok)throw new Error(r.status);
     const j=await r.json();
-    if(j.length){mergeIn(j[0].value);ensureMaster();migrate();saveLocal();renderAll();}
+    if(j.length){mergeIn(j[0].value);ensureMaster();migrate();dedupeRecs(true);saveLocal();renderAll();}
     setSync('ok','서버 연결됨');
     if(manual)toast('서버 자료를 받았습니다');
     await push();
@@ -853,7 +858,9 @@ function fillPn(keep){
 function chip(r){const e=$('f_sr');const parts=e.value.trim().split(/\s+/).filter(Boolean);const i=parts.indexOf(r);if(i>=0)parts.splice(i,1);else parts.push(r);e.value=parts.join(' ');}
 function onPn(){const it=S.master.items.find(i=>i.pn===$('f_pn').value);if(!it)return;$('f_name').value=it.name;if(!$('f_cust').value)$('f_cust').value=it.cust;
   const last=S.recs.filter(r=>r.pn===it.pn).sort((a,b)=>b.date.localeCompare(a.date))[0];
-  if(!$('f_spm').value)$('f_spm').value=spmFor($('f_mc').value,it.pn)||last?.spm||'';
+  const std=spmFor($('f_mc').value,it.pn);
+  if(std)$('f_spm').value=std;                       // 표준이 있으면 항상 표준값으로
+  else if(!$('f_spm').value)$('f_spm').value=last?.spm||'';
   $('fmsg').textContent=$('f_spm').value?'':'이 설비·품번의 SPM 표준이 없습니다. SPM을 입력하면 다음부터 자동으로 채워집니다.';
   if($('f_brk').value===''){const lc=S.recs.filter(r=>r.cust===(it.cust||$('f_cust').value)).sort((a,b)=>b.date.localeCompare(a.date))[0];$('f_brk').value=lc?(lc.brk||0):0}
   if(last&&!$('f_mc').value)$('f_mc').value=last.mc;
@@ -1275,6 +1282,12 @@ function saveMes(quiet,dateArg){
     S.master.spmdb=S.master.spmdb||[];
     if(!S.master.spmdb.find(x=>x.mc===r.mc&&x.pn===r.pn))S.master.spmdb.push({mc:r.mc,pn:r.pn,spm});
     if(r.w1&&!S.master.workers.includes(r.w1))S.master.workers.push(r.w1);
+    const dupRec=S.recs.find(z=>z.date===d&&z.mc===r.mc&&z.pn===r.pn);
+    if(dupRec){ // 같은 날짜·설비·품번이 이미 있으면 새로 만들지 않고 갱신 (중복 방지)
+      Object.assign(dupRec,{qty:r.qty,ng:r.ng,ngp:r.ngp||0,mes:(r.mesQty!=null?r.mesQty:r.qty),
+        src:r.closed?'마감':'MES',work:r.work,stop:r.stop,brk:r.brk,spm,ua:now()});
+      n++;return;
+    }
     S.recs.push({id:uid(),date:d,mc:r.mc,proc:'P/R',cust:it?it.cust:'',pn:r.pn,name:it?it.name:r.name2,
       w1:r.w1,w2:'',w3:'',w4:'',spm:spm,work:r.work,stop:r.stop,brk:r.brk,qty:r.qty,ng:r.ng,ngp:r.ngp||0,
       sr:r.sr,note:r.note,reg:1,mes:(r.mesQty!=null?r.mesQty:r.qty),mesRun:r.run,src:r.closed?'마감':'MES',ua:now(),by:localStorage.getItem('tj_me')||''});
@@ -2034,6 +2047,29 @@ function showClo(d){
 }
 
 /* ===== 실마감 동기화: 저장된 일보 실적을 MES 원장(실마감 반영)과 맞춤 ===== */
+/* 같은 날짜·설비·품번이 여러 줄이면 하나만 남긴다 (기기 두 대에서 동시에 저장된 경우) */
+function dedupeRecs(quiet){
+  const key=r=>r.date+'|'+r.mc+'|'+r.pn;
+  const rank=x=>x.src==='조정'?3:x.src==='마감'?2:1;
+  const best=new Map();
+  S.recs.forEach(r=>{
+    const k=key(r), o=best.get(k);
+    if(!o){best.set(k,r);return}
+    if((rank(r)>rank(o))||(rank(r)===rank(o)&&(r.ua||'')>(o.ua||'')))best.set(k,r);
+  });
+  const keep=new Set([...best.values()].map(r=>r.id));
+  const drop=S.recs.filter(r=>!keep.has(r.id));
+  if(!drop.length){if(!quiet)toast('중복된 일보가 없습니다');return 0}
+  const days=[...new Set(drop.map(r=>r.date))].sort();
+  if(!quiet&&!confirm(`중복 일보 ${drop.length}건을 정리합니다.\n\n${days[0]} ~ ${days[days.length-1]}\n같은 날짜·설비·품번이 여러 줄인 경우 한 줄만 남깁니다.\n(조정 → 마감 → MES 순, 같으면 최근 저장분)\n\n계속할까요?`))return 0;
+  drop.forEach(r=>{S.del[r.id]=now()});
+  S.recs=S.recs.filter(r=>keep.has(r.id));
+  logAdd('중복 일보 정리',`${drop.length}건 (${days.join(', ').slice(0,80)})`);
+  commit();renderAll();
+  if(!quiet)toast(`중복 ${drop.length}건을 정리했습니다`);
+  return drop.length;
+}
+
 /* 일보 자동 등록 — 최근 며칠 중 일보가 없는 날을 MES에서 자동으로 만든다 */
 const AUTO_ENTRY_DAYS=3;
 function autoEntryOn(){return localStorage.getItem('tj_autoentry')==='1'}
@@ -2321,9 +2357,28 @@ function addSpm(){const mc=$('sp_mc').value.trim(),pn=$('sp_pn').value.trim(),v=
   if(!pn||!v){toast('품번과 SPM을 입력하세요');return}
   S.master.spmdb=S.master.spmdb||[];
   const ex=S.master.spmdb.find(x=>x.mc===mc&&x.pn===pn);
+  const old=ex?+ex.spm||0:0;
   if(ex)ex.spm=v; else S.master.spmdb.push({mc,pn,spm:v});
-  $('sp_pn').value='';$('sp_v').value='';commit();toast(ex?'수정했습니다':'추가했습니다');}
-function upSpm(i,v){const x=S.master.spmdb[i];if(x){x.spm=+v||0;commit()}}
+  $('sp_pn').value='';$('sp_v').value='';commit();toast(ex?'수정했습니다':'추가했습니다');
+  if(v!==old)applySpmToRecs(mc,pn,v,old);}
+function upSpm(i,v){
+  const x=S.master.spmdb[i];if(!x)return;
+  const old=+x.spm||0, nv=+v||0;
+  x.spm=nv;commit();
+  if(nv&&nv!==old)applySpmToRecs(x.mc,x.pn,nv,old);
+}
+/* 표준 SPM을 고치면 저장된 일보에도 반영할지 묻는다 */
+function applySpmToRecs(mc,pn,nv,old){
+  const hit=S.recs.filter(r=>r.pn===pn&&(mc?r.mc===mc:true)&&+r.spm&&+r.spm!==nv);
+  if(!hit.length)return;
+  const days=[...new Set(hit.map(r=>r.date))].sort();
+  const where=mc||'전 설비';
+  if(!confirm(`SPM 표준을 ${old||'-'} → ${nv} 로 바꿨습니다.\n\n${where} / ${pn}\n이미 저장된 일보 ${hit.length}건(${days[0]} ~ ${days[days.length-1]})의 SPM도 함께 바꿀까요?\n\n확인 = 함께 변경 (효율이 다시 계산됩니다)\n취소 = 기준값만 변경`))return;
+  hit.forEach(r=>{r.spm=nv;r.ua=now()});
+  logAdd('SPM 일괄 반영',`${where} / ${pn} · ${old||'-'} → ${nv} · ${hit.length}건`);
+  commit();renderAll();
+  toast(`일보 ${hit.length}건의 SPM을 ${nv}로 바꿨습니다`);
+}
 function delSpm(i){const x=S.master.spmdb[i];if(!x)return;if(!askPin('SPM 표준 삭제 · '+(x.mc||'공통')+' / '+x.pn))return;if(!confirm((x.mc||'공통')+' / '+x.pn+' SPM 표준을 삭제합니다. 계속할까요?'))return;S.master.spmdb.splice(i,1);logAdd('SPM 표준 삭제',(x.mc||'공통')+' / '+x.pn+' = '+x.spm);commit();}
 function addMesMc(){
   const c=($('mmc_code').value||'').trim(), v=$('mmc_mc').value;
@@ -2356,6 +2411,9 @@ function delM(k,v){
 function renderData(){$('me').value=localStorage.getItem('tj_me')||'';
   const b=$('btnAutoEntry');
   if(b){const on=autoEntryOn();b.textContent=on?'자동 등록 켜짐 · 끄기':'자동 등록 꺼짐 · 켜기';b.className=on?'p':'';}
+  const dm=$('dupMsg');
+  if(dm){const k={};let dup=0;S.recs.forEach(r=>{const x=r.date+'|'+r.mc+'|'+r.pn;k[x]=(k[x]||0)+1;if(k[x]===2)dup++});
+    dm.textContent=dup?`중복 ${dup}건 발견 — 정리가 필요합니다`:'중복 없음';}
   const m=$('autoEntryMsg');
   if(m){const d=new Date();d.setDate(d.getDate()-1);
     const y=[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
