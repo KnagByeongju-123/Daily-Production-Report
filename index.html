@@ -319,8 +319,6 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
     <!-- 1. 불러오기 · 필터 -->
     <div class="panel" id="mesPanel">
       <div class="fl">
-        <button class="p" onclick="newEntry()">+ 오늘 일보 입력</button>
-        <span style="width:8px"></span>
         <select id="h_range" style="min-width:150px"></select>
         <input type="date" id="h_from" style="display:none"><input type="date" id="h_to" style="display:none">
         <select id="h_cust"><option value="">고객사 전체</option></select>
@@ -334,9 +332,15 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
 
     <!-- 3. 생산이력(DB) -->
     <div class="panel" id="histPanel">
-      <h3 style="margin-bottom:8px">생산이력 (줄을 클릭하면 아래 입력란으로 불러옵니다)</h3>
+      <h3 style="margin-bottom:8px">생산이력 <span class="muted" style="font-weight:400;font-size:12px">(줄을 클릭하면 수정 창이 열립니다)</span></h3>
       <div id="h_over" class="overbar noprint" style="display:none"></div>
       <div class="tw" style="max-height:46vh"><table id="tHist"></table></div>
+      <div class="fl noprint" style="margin-top:10px">
+        <button class="p" onclick="newEntry()">+ 오늘 일보 입력</button>
+        <span class="grow"></span>
+        <button onclick="exportHist()">엑셀 다운로드</button>
+        <button onclick="window.print()">인쇄</button>
+      </div>
     </div>
 
     <!-- 3-1. 일일 생산수량 조정 → 재고 반영 -->
@@ -353,9 +357,10 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
       <div class="tw" style="max-height:40vh"><table id="tAdj"></table></div>
     </div>
 
-    <!-- 2. 일보 입력 -->
-    <div class="panel">
-      <div class="fl" style="margin-bottom:12px"><h3 id="entryTitle" style="margin:0">새 일보</h3><span class="grow"></span><button class="s" onclick="copyPrev()">전일 동일설비 불러오기</button></div>
+    <!-- 2. 일보 입력 (팝업) -->
+    <div class="mask" id="formMask"><div class="modal" id="formModal" style="width:min(1180px,100%);padding:0;overflow:hidden">
+    <div class="panel" style="margin:0;border-radius:10px 10px 0 0">
+      <div class="fl" style="margin-bottom:12px"><h3 id="entryTitle" style="margin:0">새 일보</h3><span class="grow"></span><button class="s" onclick="copyPrev()">전일 동일설비 불러오기</button><button class="s" onclick="closeForm()" title="창 닫기 (Esc)">✕ 닫기</button></div>
       <div class="form">
         <div><label>생산일자</label><input type="date" id="f_date"></div>
         <div class="c2"><label>설비</label><select id="f_mc"></select></div>
@@ -383,19 +388,18 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
     </div>
 
     <!-- 4. 실행 버튼 -->
-    <div class="panel act">
+    <div class="panel act" style="margin:0;border-radius:0 0 10px 10px;border-top:1px solid #E6EBF2">
       <div class="fl">
         <button class="p" onclick="saveRec()" id="btnSave">저장 (Ctrl+Enter)</button>
         <button onclick="newRec()">신규작성</button>
         <button class="p" onclick="saveRec()" id="btnEdit">수정 저장</button>
         <button class="d" onclick="delSel()" id="btnDel">삭제</button>
-        <button onclick="cancelEdit()" id="btnCancel" title="수정 중인 내용을 버리고 편집을 끝냅니다">취소</button>
         <span class="grow"></span>
-        <button onclick="exportHist()">엑셀 다운로드</button>
-        <button onclick="window.print()">인쇄</button>
         <span class="muted" id="fmsg"></span>
+        <button onclick="closeForm()">닫기</button>
       </div>
     </div>
+    </div></div>
     <datalist id="dlW"></datalist>
   </section>
 
@@ -877,7 +881,7 @@ function readout(){const r=readForm();const c=calc(r);$('r_run').textContent=fmt
 function readForm(){const _sg=$('f_single')&&$('f_single').checked;return{date:$('f_date').value,mc:$('f_mc').value,proc:$('f_proc').value.trim()||'P/R',cust:$('f_cust').value,pn:$('f_pn').value,name:$('f_name').value.trim(),w1:$('f_w1').value.trim(),w2:$('f_w2').value.trim(),w3:$('f_w3').value.trim(),w4:$('f_w4').value.trim(),spm:_sg?0:(+$('f_spm').value||0),work:+$('f_work').value||0,stop:+$('f_stop').value||0,brk:+$('f_brk').value||0,qty:+$('f_qty').value||0,ng:+$('f_ng').value||0,ngp:+$('f_ngp').value||0,reg:+$('f_reg').value,sr:$('f_sr').value.trim(),note:$('f_note').value.trim()}}
 function writeForm(r){$('f_date').value=r.date;$('f_mc').value=r.mc;$('f_proc').value=r.proc||'P/R';$('f_cust').value=r.cust;fillPn(r.pn);$('f_pn').value=r.pn;$('f_name').value=r.name;['w1','w2','w3','w4'].forEach(k=>$('f_'+k).value=r[k]||'');$('f_spm').value=r.spm||'';if($('f_single'))$('f_single').checked=!(+r.spm);$('f_work').value=r.work;$('f_stop').value=r.stop;$('f_brk').value=r.brk||'';$('f_qty').value=r.qty;$('f_ng').value=r.ng||'';$('f_ngp').value=r.ngp||'';$('f_reg').value=r.reg??1;$('f_sr').value=r.sr||'';$('f_note').value=r.note||'';readout();}
 function resetForm(keepDate){const d=keepDate?$('f_date').value:today();editId=null;$('entryTitle').textContent='새 일보';if($('btnSave')){$('btnSave').textContent='저장 (Ctrl+Enter)';$('btnEdit').disabled=true;$('btnDel').disabled=true}
-  if($('btnCancel'))$('btnCancel').disabled=true;writeForm({date:d,mc:'',proc:'P/R',cust:'',pn:'',name:'',spm:'',work:'',stop:'',brk:'',qty:'',ng:'',reg:1,sr:'',note:''});$('fmsg').textContent='';renderEntry();}
+  writeForm({date:d,mc:'',proc:'P/R',cust:'',pn:'',name:'',spm:'',work:'',stop:'',brk:'',qty:'',ng:'',reg:1,sr:'',note:''});$('fmsg').textContent='';renderEntry();}
 function saveRec(cont){
   const r=readForm();
   const miss=[];if(!r.date)miss.push('생산일자');if(!r.mc)miss.push('설비');if(!r.cust)miss.push('고객사');if(!r.pn)miss.push('품번');if(!r.work)miss.push('근무시간');
@@ -898,17 +902,16 @@ function saveRec(cont){
     r.id=uid();S.recs.push(r);toast('저장했습니다');
   }
   const d=r.date;commit();
-  if(cont){resetForm(true);$('f_date').value=d;$('f_mc').focus();}else{resetForm(true);$('f_date').value=d;renderEntry();}
+  if(cont){resetForm(true);$('f_date').value=d;$('f_mc').focus();}else{resetForm(true);$('f_date').value=d;$('formMask').classList.remove('on');renderEntry();}
 }
 function editRec(id){const r=S.recs.find(x=>x.id===id);if(!r)return;editId=id;
   if(pg!=='entry')go('entry');
   $('entryTitle').textContent='일보 수정 · '+r.date+' '+r.mc+' · '+r.pn;
   writeForm(r);if($('f_auto'))$('f_auto').checked=false;   // 저장된 일보는 정지시간을 그대로 유지
   $('btnSave').textContent='수정 저장 (Ctrl+Enter)';$('btnEdit').disabled=false;$('btnDel').disabled=false;
-  if($('btnCancel'))$('btnCancel').disabled=false;
   renderHist();
-  const el=$('entryTitle');if(el)el.scrollIntoView({behavior:'smooth',block:'start'});}
-function delRec(id){const r=S.recs.find(x=>x.id===id);if(!r)return;if(!askPin(`일보 삭제 · ${r.date} ${r.mc} ${r.pn} (실적 ${fmt(r.qty)})`))return;if(!confirm(r.date+' '+r.mc+' '+r.pn+' 일보를 삭제합니다. 계속할까요?'))return;S.recs=S.recs.filter(x=>x.id!==id);S.del[id]=now();logAdd('일보 삭제',r.date+' '+r.mc+' '+r.pn+' / 실적 '+r.qty);if(editId===id)resetForm(true);commit();toast('삭제했습니다');}
+  openForm();}
+function delRec(id){const r=S.recs.find(x=>x.id===id);if(!r)return;if(!askPin(`일보 삭제 · ${r.date} ${r.mc} ${r.pn} (실적 ${fmt(r.qty)})`))return;if(!confirm(r.date+' '+r.mc+' '+r.pn+' 일보를 삭제합니다. 계속할까요?'))return;S.recs=S.recs.filter(x=>x.id!==id);S.del[id]=now();logAdd('일보 삭제',r.date+' '+r.mc+' '+r.pn+' / 실적 '+r.qty);if(editId===id){resetForm(true);$('formMask').classList.remove('on');}commit();toast('삭제했습니다');}
 function copyPrev(){const mc=$('f_mc').value,d=$('f_date').value;if(!mc){$('fmsg').textContent='설비를 먼저 선택하세요';return}
   const prev=S.recs.filter(r=>r.mc===mc&&r.date<d).sort((a,b)=>b.date.localeCompare(a.date))[0];
   if(!prev){$('fmsg').textContent='이 설비의 이전 일보가 없습니다';return}
@@ -920,20 +923,20 @@ function renderEntry(){
   $('btnEdit').disabled=!editId;$('btnDel').disabled=!editId;
   renderHist();
 }
-function cancelEdit(){
-  if(!editId){resetForm(true);toast('입력을 비웠습니다');return}
-  const r=S.recs.find(x=>x.id===editId);
-  const nm=r?`${r.date} ${r.mc} ${r.pn}`:'';
-  if(!confirm(`수정 중인 내용을 버립니다.${nm?'\n'+nm:''}\n\n저장하지 않은 변경은 사라집니다. 계속할까요?`))return;
-  resetForm(true);
-  toast('수정을 취소했습니다');
+/* ===== 일보 입력 팝업 ===== */
+function openForm(){$('formMask').classList.add('on');setTimeout(()=>{const f=$('f_mc');if(f&&!f.value)f.focus()},50)}
+function closeForm(){
+  $('formMask').classList.remove('on');
+  if(editId){editId=null;resetForm(true);}
 }
-function newRec(){resetForm(true);toast('새 일보를 입력하세요')}
-function newEntry(){resetForm(false);$('f_date').value=today();const el=$('entryTitle');if(el)el.scrollIntoView({behavior:'smooth',block:'start'});toast('오늘 일보를 입력하세요')}
+function newRec(){resetForm(true);openForm();toast('새 일보를 입력하세요')}
+function newEntry(){resetForm(false);$('f_date').value=today();openForm();toast('오늘 일보를 입력하세요')}
+$('formMask').addEventListener('click',e=>{if(e.target===$('formMask'))closeForm()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('formMask').classList.contains('on'))closeForm()});
 function editSel(){if(!editId){toast('아래 생산이력에서 수정할 줄을 먼저 클릭하세요');return}
   const r=S.recs.find(x=>x.id===editId);if(r){writeForm(r);const el=$('entryTitle');if(el)el.scrollIntoView({behavior:'smooth',block:'start'});toast('입력란으로 다시 불러왔습니다')}}
 function undoEdit(){editSel()}
-function delSel(){if(!editId){toast('아래 생산이력에서 삭제할 줄을 먼저 클릭하세요');return}delRec(editId)}
+function delSel(){if(!editId){toast('생산이력에서 삭제할 줄을 먼저 클릭하세요');return}delRec(editId)}
 ['f_spm','f_work','f_stop','f_brk','f_qty','f_ngp'].forEach(id=>$(id).addEventListener('input',readout));
 if($('f_single'))$('f_single').addEventListener('change',()=>{if($('f_single').checked)$('f_spm').value='';readout()});
 // 실적수량을 고치면 가동시간(=실적÷SPM)을 다시 잡아 가동율도 함께 바뀌게 한다
@@ -973,7 +976,7 @@ function spmFor(mc,pn){
 $('f_mc').addEventListener('change',()=>{const s=spmFor($('f_mc').value,$('f_pn').value);if(s){$('f_spm').value=s;readout()}});
 $('f_cust').addEventListener('change',()=>{fillPn();});
 $('f_date').addEventListener('change',renderEntry);
-document.addEventListener('keydown',e=>{if(e.ctrlKey&&e.key==='Enter'&&pg==='entry')saveRec()});
+document.addEventListener('keydown',e=>{if(e.ctrlKey&&e.key==='Enter'&&pg==='entry'&&$('formMask').classList.contains('on'))saveRec()});
 
 /* ===== 누락일보콜 (구 MES 실적 불러오기) ===== */
 const mesNorm=s=>String(s||'').toUpperCase().replace(/[^0-9A-Z]/g,'');
