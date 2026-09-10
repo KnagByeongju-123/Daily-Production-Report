@@ -294,7 +294,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
   <div class="top">
     <h2 id="title">생산일보 입력 · 이력</h2>
     <div class="fl" id="topMes" style="display:none;flex:1;gap:6px">
-      <button class="p" onclick="openMes()">MES 실적 불러오기</button><button onclick="syncClose()" title="이미 저장된 일보의 실적을 모니터링 서버 마감 수량으로 한 번에 맞춥니다">실마감 동기화</button><button class="s" onclick="mesDiag()">연결 점검</button>
+      <button class="p" onclick="openMes()" title="선택한 날짜의 MES 자료를 읽어 아직 만들지 않은 일보를 만들어 줍니다">누락일보콜</button><button onclick="syncClose()" title="이미 저장된 일보의 실적을 현장 마감 수량(실제양품)으로 한 번에 맞춥니다">실제수량갱신</button><button class="s" onclick="mesDiag()">연결 점검</button>
     </div>
     <div class="mon"><button onclick="mv(-1)">‹</button><b id="monLbl"></b><button onclick="mv(1)">›</button></div>
     <button id="btnToday" onclick="go('entry')" class="p">+ 오늘 일보 입력</button>
@@ -542,7 +542,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
       <h3>매일 하는 일 (5분)</h3>
       <ol>
         <li>왼쪽 <b>일보 입력</b> 클릭 → 날짜는 오늘로 자동 설정</li>
-        <li><b>MES 실적 불러오기</b>를 누르면 그날 MES 일 생산수량(생산마감)과 불량폐기를 읽어 설비별로 줄을 만들어 줍니다. 근무시간·작업자·정지사유만 확인·수정하고 저장하면 됩니다 (2026년 9월분부터).</li>
+        <li><b>누락일보콜</b>을 누르면 그날 MES 일 생산수량(생산마감)과 불량폐기를 읽어 설비별로 줄을 만들어 줍니다. 근무시간·작업자·정지사유만 확인·수정하고 저장하면 됩니다 (2026년 9월분부터).</li>
         <li>설비 선택 → 고객사 선택 → 품번 선택하면 품명·SPM이 자동으로 채워짐</li>
         <li>작업자, 근무시간(분), 정지시간(분), 실적수량, 불량수량 입력</li>
         <li>정지사유는 아래 버튼을 눌러 조합 (조회 · 금형점검 · 소재교환 …), 특기사항에 불량 내용 기록</li>
@@ -964,7 +964,7 @@ $('f_cust').addEventListener('change',()=>{fillPn();});
 $('f_date').addEventListener('change',renderEntry);
 document.addEventListener('keydown',e=>{if(e.ctrlKey&&e.key==='Enter'&&pg==='entry')saveRec()});
 
-/* ===== MES 실적 불러오기 ===== */
+/* ===== 누락일보콜 (구 MES 실적 불러오기) ===== */
 const mesNorm=s=>String(s||'').toUpperCase().replace(/[^0-9A-Z]/g,'');
 function mapPn(code,mc,d,allowLast){
   const m=S.master.mesPn||{};
@@ -981,7 +981,7 @@ let MESROWS=[],MESDIAG={},MESCLO=[];
 async function openMes(dateArg,quiet){
   const d=dateArg||$('f_date').value||today();
   if(d<MES_FROM){if(!quiet)toast(MES_FROM.slice(0,7)+'월부터 MES 연동을 씁니다. 그 이전은 기존 자료를 그대로 두세요');return}
-  if(!quiet){$('modal').innerHTML='<h2>MES 실적 불러오기</h2><p class="muted">'+d+' 자료를 읽는 중…</p>';
+  if(!quiet){$('modal').innerHTML='<h2>누락일보콜</h2><p class="muted">'+d+' 자료를 읽는 중…</p>';
     $('mask').classList.add('on');}
   let led=[],use=[],dt=[],clo=[];
   try{
@@ -1064,7 +1064,7 @@ async function openMes(dateArg,quiet){
       logOk:!!(r5&&r5.ok),logSt:r5?r5.status:'-',logN,
       clo:clo.length,cloWith:clo.filter(x=>x.actual_qty!=null).length};
   }catch(e){ if(quiet)return null;
-    $('modal').innerHTML='<h2>MES 실적 불러오기</h2><p>MES 자료를 읽지 못했습니다. 인터넷 연결을 확인하세요.</p><div class="fl"><button onclick="closeMask()">닫기</button></div>';return}
+    $('modal').innerHTML='<h2>누락일보콜</h2><p>MES 자료를 읽지 못했습니다. 인터넷 연결을 확인하세요.</p><div class="fl"><button onclick="closeMask()">닫기</button></div>';return}
   // 설비별 가동시간(분) — 소재사용 기록에서 계산
   const runMap={},nameMap={},ranKeys=new Set();
   led.forEach(x=>{if(x.name)nameMap[x.pn]=x.name});
@@ -1243,7 +1243,7 @@ function drawMes(d){
       ? `<span class="tag a">모니터링 실적 0건 → MES 원장 ${dg.ledN||0}건 사용</span>`
       : `<span class="tag${dg.dp?'':' r'}">모니터링 실적 ${dg.dp||0}건${dg.dpFilter?' · '+dg.dpFilter:''}${(!dg.dp&&dg.dpAll)?` (표 전체 ${dg.dpAll}건)`:''}</span>`)+(nMon?`<span class="tag g">모니터링 마감 ${nMon}줄</span>`:'');
   const warn=[nClosed?`현장 마감 반영 ${nClosed}줄`:'',nWait?`실제양품 미입력 ${nWait}줄`:'',nNoMc?`설비 미지정 ${nNoMc}줄`:'',nPend?`생산마감 미완료 ${nPend}줄`:'',nNoRun?`가동시간 없음 ${nNoRun}줄`:'',nNoSpm?`SPM 입력 필요 ${nNoSpm}줄`:'',nUpd?`덮어쓰기 ${nUpd}줄`:'',nDup?`이미 저장 ${nDup}줄`:''].filter(Boolean).join(' · ');
-  $('modal').innerHTML=`<div class="fl" style="margin-bottom:10px"><h2 style="flex:1">MES 실적 불러오기 · ${d}</h2><button class="s" onclick="showClo('${d}')">마감 자료 보기</button><button onclick="closeMask()">닫기</button></div>
+  $('modal').innerHTML=`<div class="fl" style="margin-bottom:10px"><h2 style="flex:1">누락일보콜 · ${d}</h2><button class="s" onclick="showClo('${d}')">마감 자료 보기</button><button onclick="closeMask()">닫기</button></div>
   <p class="muted" style="margin-top:0">MES 모니터링 서버에서 설비별 생산수량을 읽고, 현장에서 확정한 <b>실제 양품수량(생산마감)</b>이 있으면 그 값을 실적으로 씁니다. 근무시간·작업자·정지사유를 확인·수정한 뒤 저장하세요. 정지시간은 근무−MES가동으로 자동 계산되며 직접 고칠 수 있습니다. 정지사유·정지시간은 <b>MES 가동설비 모니터링</b>의 비가동 집계에서 그대로 가져옵니다(없으면 가동이 끊긴 시간대로 대체). 특기사항에는 MES 불량폐기 사유가 <b>코드 대신 불량유형 이름</b>으로 들어옵니다.</p>
   <div class="fl" style="margin-bottom:8px"><span class="tag">설비 ${nMc}대 · ${MESROWS.length}줄</span>${cloTag}${ledTag}${warn?`<span class="tag a">${warn}</span>`:''}</div>
   <div class="tw" style="max-height:60vh"><table><tr><th></th><th>MES</th><th>설비</th><th>품번</th><th>작업자</th><th class=num>SPM</th><th>근무(분)</th><th class=num>MES가동</th><th>정지(분)</th><th>실적(일생산)</th><th class=num>MES불량</th><th>작업불량</th><th>시타발·검사</th><th>정지사유</th><th>특기사항(불량사유)</th><th></th></tr>
@@ -1352,7 +1352,7 @@ function renderAdj(){
   if(!inp.value)inp.value=$('f_date').value||today();
   const d=inp.value,L=adjRows(),T=$('tAdj');
   if(d<MES_FROM){T.innerHTML=`<tr><td class=empty>${MES_FROM.slice(0,7)}월부터 조정·재고 반영을 씁니다</td></tr>`;return}
-  if(!L.length){T.innerHTML='<tr><td class=empty>이 날짜의 일보가 없습니다 — MES 실적 불러오기나 일보 입력 후 조정하세요</td></tr>';return}
+  if(!L.length){T.innerHTML='<tr><td class=empty>이 날짜의 일보가 없습니다 — 누락일보콜이나 일보 입력 후 조정하세요</td></tr>';return}
   let tm=0,tq=0;
   const h='<tr><th>설비</th><th>품번</th><th>품명</th><th>작업자</th><th class=num>MES 수량</th><th class=num>실제 양품</th><th class=num>차이</th><th>조정사유</th></tr>';
   T.innerHTML=h+L.map(r=>{const e=ADJ[r.id]||{};const q=e.qty!=null?e.qty:(+r.qty||0);const mes=(r.mes!=null&&r.mes!=='')?+r.mes:null;const df=mes!=null?q-mes:null;
@@ -2106,7 +2106,7 @@ async function autoEntry(force){
   return done;
 }
 
-/* 실마감 자동 반영 — 오전 7시 이후, MES 자료가 갱신되면 저장된 일보를 조용히 맞춘다 */
+/* 실제수량 자동갱신 — 오전 7시 이후, MES 자료가 갱신되면 저장된 일보를 조용히 맞춘다 */
 const AUTO_FROM_HOUR=7;      // 이 시각 이후에만 동작
 const AUTO_DAYS=10;          // 최근 며칠분을 살필지
 let autoBusy=false, autoLast=0;
@@ -2121,8 +2121,8 @@ async function autoSync(force){
     const from=[d0.getFullYear(),String(d0.getMonth()+1).padStart(2,'0'),String(d0.getDate()).padStart(2,'0')].join('-');
     const res=await syncRange(from<MES_FROM?MES_FROM:from, to, true);
     if(res&&res.upd){
-      toast(`실마감 자동 반영 ${res.upd}건 (모니터링 ${res.nClo} · 원장 ${res.nLed})`);
-      logAdd('실마감 자동 반영',`${from}~${to} · ${res.upd}건`);
+      toast(`실제수량 자동갱신 ${res.upd}건 (모니터링 ${res.nClo} · 원장 ${res.nLed})`);
+      logAdd('실제수량 자동갱신',`${from}~${to} · ${res.upd}건`);
       commit();renderAll();
     }
   }catch(e){}
@@ -2130,11 +2130,11 @@ async function autoSync(force){
 }
 
 async function syncClose(){
-  const from=prompt('실마감 동기화 시작일 (YYYY-MM-DD)',MES_FROM);if(!from)return;
+  const from=prompt('실제수량갱신 시작일 (YYYY-MM-DD)',MES_FROM);if(!from)return;
   const to=prompt('종료일 (YYYY-MM-DD)',today());if(!to)return;
   const r=await syncRange(from,to,false);
   if(!r)return;
-  alert(`실마감 동기화 (${from} ~ ${to})\n\n대상 ${r.days}일 · 갱신 ${r.upd}건 (모니터링 ${r.nClo} · 원장 ${r.nLed}) · 동일 ${r.same}건 · 일보 없음 ${r.miss}건`
+  alert(`실제수량갱신 (${from} ~ ${to})\n\n대상 ${r.days}일 · 갱신 ${r.upd}건 (모니터링 ${r.nClo} · 원장 ${r.nLed}) · 동일 ${r.same}건 · 일보 없음 ${r.miss}건`
     +(r.errs.length?'\n\n※ '+r.errs.join('\n'):'')
     +(r.changes.length?'\n\n'+r.changes.slice(0,20).join('\n')+(r.changes.length>20?`\n… 외 ${r.changes.length-20}건`:''):''));
 }
@@ -2178,7 +2178,7 @@ async function syncRange(from,to,quiet){
         if(cz&&cz.worker&&!rec.w1)rec.w1=cz.worker;
         if(rec.spm&&(+rec.work-+(rec.brk||0)-+rec.stop)<Math.round(q2/rec.spm)*0.5){rec.work=+(rec.brk||0)+ +rec.stop+Math.round(q2/rec.spm)}
       })});
-    if(upd&&!quiet){logAdd('실마감 동기화',`${from}~${to} · ${upd}건 갱신`);commit();}
+    if(upd&&!quiet){logAdd('실제수량갱신',`${from}~${to} · ${upd}건 갱신`);commit();}
     return{days,upd,same,miss,nClo,nLed,changes,errs};
   }catch(e){ if(!quiet)alert('동기화 실패: '+e.message); return null }
 }
