@@ -389,6 +389,7 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
         <button onclick="newRec()">신규작성</button>
         <button class="p" onclick="saveRec()" id="btnEdit">수정 저장</button>
         <button class="d" onclick="delSel()" id="btnDel">삭제</button>
+        <button onclick="cancelEdit()" id="btnCancel" title="수정 중인 내용을 버리고 편집을 끝냅니다">취소</button>
         <span class="grow"></span>
         <button onclick="exportHist()">엑셀 다운로드</button>
         <button onclick="window.print()">인쇄</button>
@@ -875,7 +876,8 @@ function readout(){const r=readForm();const c=calc(r);$('r_run').textContent=fmt
     w.innerHTML=m?`<b>⚠ 효율 ${pct(c.eff)} — 100% 초과</b><br>${esc(m)}`:'';w.style.display=m?'':'none';}}
 function readForm(){const _sg=$('f_single')&&$('f_single').checked;return{date:$('f_date').value,mc:$('f_mc').value,proc:$('f_proc').value.trim()||'P/R',cust:$('f_cust').value,pn:$('f_pn').value,name:$('f_name').value.trim(),w1:$('f_w1').value.trim(),w2:$('f_w2').value.trim(),w3:$('f_w3').value.trim(),w4:$('f_w4').value.trim(),spm:_sg?0:(+$('f_spm').value||0),work:+$('f_work').value||0,stop:+$('f_stop').value||0,brk:+$('f_brk').value||0,qty:+$('f_qty').value||0,ng:+$('f_ng').value||0,ngp:+$('f_ngp').value||0,reg:+$('f_reg').value,sr:$('f_sr').value.trim(),note:$('f_note').value.trim()}}
 function writeForm(r){$('f_date').value=r.date;$('f_mc').value=r.mc;$('f_proc').value=r.proc||'P/R';$('f_cust').value=r.cust;fillPn(r.pn);$('f_pn').value=r.pn;$('f_name').value=r.name;['w1','w2','w3','w4'].forEach(k=>$('f_'+k).value=r[k]||'');$('f_spm').value=r.spm||'';if($('f_single'))$('f_single').checked=!(+r.spm);$('f_work').value=r.work;$('f_stop').value=r.stop;$('f_brk').value=r.brk||'';$('f_qty').value=r.qty;$('f_ng').value=r.ng||'';$('f_ngp').value=r.ngp||'';$('f_reg').value=r.reg??1;$('f_sr').value=r.sr||'';$('f_note').value=r.note||'';readout();}
-function resetForm(keepDate){const d=keepDate?$('f_date').value:today();editId=null;$('entryTitle').textContent='새 일보';if($('btnSave')){$('btnSave').textContent='저장 (Ctrl+Enter)';$('btnEdit').disabled=true;$('btnDel').disabled=true}writeForm({date:d,mc:'',proc:'P/R',cust:'',pn:'',name:'',spm:'',work:'',stop:'',brk:'',qty:'',ng:'',reg:1,sr:'',note:''});$('fmsg').textContent='';renderEntry();}
+function resetForm(keepDate){const d=keepDate?$('f_date').value:today();editId=null;$('entryTitle').textContent='새 일보';if($('btnSave')){$('btnSave').textContent='저장 (Ctrl+Enter)';$('btnEdit').disabled=true;$('btnDel').disabled=true}
+  if($('btnCancel'))$('btnCancel').disabled=true;writeForm({date:d,mc:'',proc:'P/R',cust:'',pn:'',name:'',spm:'',work:'',stop:'',brk:'',qty:'',ng:'',reg:1,sr:'',note:''});$('fmsg').textContent='';renderEntry();}
 function saveRec(cont){
   const r=readForm();
   const miss=[];if(!r.date)miss.push('생산일자');if(!r.mc)miss.push('설비');if(!r.cust)miss.push('고객사');if(!r.pn)miss.push('품번');if(!r.work)miss.push('근무시간');
@@ -903,6 +905,7 @@ function editRec(id){const r=S.recs.find(x=>x.id===id);if(!r)return;editId=id;
   $('entryTitle').textContent='일보 수정 · '+r.date+' '+r.mc+' · '+r.pn;
   writeForm(r);if($('f_auto'))$('f_auto').checked=false;   // 저장된 일보는 정지시간을 그대로 유지
   $('btnSave').textContent='수정 저장 (Ctrl+Enter)';$('btnEdit').disabled=false;$('btnDel').disabled=false;
+  if($('btnCancel'))$('btnCancel').disabled=false;
   renderHist();
   const el=$('entryTitle');if(el)el.scrollIntoView({behavior:'smooth',block:'start'});}
 function delRec(id){const r=S.recs.find(x=>x.id===id);if(!r)return;if(!askPin(`일보 삭제 · ${r.date} ${r.mc} ${r.pn} (실적 ${fmt(r.qty)})`))return;if(!confirm(r.date+' '+r.mc+' '+r.pn+' 일보를 삭제합니다. 계속할까요?'))return;S.recs=S.recs.filter(x=>x.id!==id);S.del[id]=now();logAdd('일보 삭제',r.date+' '+r.mc+' '+r.pn+' / 실적 '+r.qty);if(editId===id)resetForm(true);commit();toast('삭제했습니다');}
@@ -916,6 +919,14 @@ function renderEntry(){
   $('btnSave').textContent=editId?'수정 저장 (Ctrl+Enter)':'저장 (Ctrl+Enter)';
   $('btnEdit').disabled=!editId;$('btnDel').disabled=!editId;
   renderHist();
+}
+function cancelEdit(){
+  if(!editId){resetForm(true);toast('입력을 비웠습니다');return}
+  const r=S.recs.find(x=>x.id===editId);
+  const nm=r?`${r.date} ${r.mc} ${r.pn}`:'';
+  if(!confirm(`수정 중인 내용을 버립니다.${nm?'\n'+nm:''}\n\n저장하지 않은 변경은 사라집니다. 계속할까요?`))return;
+  resetForm(true);
+  toast('수정을 취소했습니다');
 }
 function newRec(){resetForm(true);toast('새 일보를 입력하세요')}
 function newEntry(){resetForm(false);$('f_date').value=today();const el=$('entryTitle');if(el)el.scrollIntoView({behavior:'smooth',block:'start'});toast('오늘 일보를 입력하세요')}
