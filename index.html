@@ -465,8 +465,8 @@ kbd{background:#EEF2F7;border:1px solid var(--line);border-radius:4px;padding:0 
       </div>
       <div>
         <div class="panel"><h3>SPM 표준 <span class="muted" style="font-weight:400;font-size:12px" id="spmCnt"></span></h3>
-          <p class="muted" style="font-size:12px;margin:0 0 8px">품번별 표준 SPM입니다. <b>설비를 비우면 그 품번의 공통값</b>이 되고, 설비마다 속도가 다른 품번만 설비를 지정해 예외로 등록합니다. 찾는 순서 : ① 설비 지정 표준 → ② 공통값 → ③ 같은 설비 최근 일보</p>
-          <div class="fl" style="margin-bottom:8px"><input id="sp_q" placeholder="설비·품번 검색" class="grow"><button class="s" onclick="spmCsvOut()" title="현재 SPM 표준 전체를 CSV로 내려받습니다">CSV 내려받기</button><button class="s" onclick="spmCsvPick()" title="설비,품번,SPM 3열 CSV를 읽어 일괄 등록합니다">CSV 올리기</button><input type="file" id="spmCsvFile" accept=".csv,text/csv" style="display:none" onchange="spmCsvIn(this.files[0])"><button class="s" onclick="cleanSpm()" title="세팅 표준서 등록분과 실제 일보에 쓰인 조합만 남기고 자동 생성분을 지웁니다">목록 정리</button><button class="s p" onclick="applySetStd()" title="설비별 세팅 표준서(다이하이트 기준표)의 최대 SPM을 일괄 적용합니다">세팅 표준서 적용</button><button class="s p" onclick="openSpmSuggest()" title="최근 일보의 실적÷가동시간으로 실측 SPM을 산출해 표준과 비교합니다">실측 SPM 제안</button><button class="s" onclick="restoreSpm()">기본값 복구</button><input id="sp_mc" list="dlMc" placeholder="설비(비우면 공통)" style="min-width:120px"><input id="sp_pn" placeholder="품번" style="min-width:120px"><input id="sp_v" type="number" placeholder="SPM" style="width:80px"><button class="p s" onclick="addSpm()">추가</button></div>
+          <p class="muted" style="font-size:12px;margin:0 0 8px"><b>설비 + 품번</b> 쌍마다 표준 SPM을 둡니다. 같은 품번이라도 설비가 다르면 별개의 표준입니다. 찾는 순서 : ① 설비+품번 표준 → ② 같은 설비·품번 최근 일보</p>
+          <div class="fl" style="margin-bottom:8px"><input id="sp_q" placeholder="설비·품번 검색" class="grow"><button class="s" onclick="spmCsvOut()" title="현재 SPM 표준 전체를 CSV로 내려받습니다">CSV 내려받기</button><button class="s" onclick="spmCsvPick()" title="설비,품번,SPM 3열 CSV를 읽어 일괄 등록합니다">CSV 올리기</button><input type="file" id="spmCsvFile" accept=".csv,text/csv" style="display:none" onchange="spmCsvIn(this.files[0])"><button class="s" onclick="cleanSpm()" title="세팅 표준서 등록분과 실제 일보에 쓰인 조합만 남기고 자동 생성분을 지웁니다">목록 정리</button><button class="s p" onclick="applySetStd()" title="설비별 세팅 표준서(다이하이트 기준표)의 최대 SPM을 일괄 적용합니다">세팅 표준서 적용</button><button class="s p" onclick="openSpmSuggest()" title="최근 일보의 실적÷가동시간으로 실측 SPM을 산출해 표준과 비교합니다">실측 SPM 제안</button><button class="s" onclick="restoreSpm()">기본값 복구</button><input id="sp_mc" list="dlMc" placeholder="설비" style="min-width:120px"><input id="sp_pn" placeholder="품번" style="min-width:120px"><input id="sp_v" type="number" placeholder="SPM" style="width:80px"><button class="p s" onclick="addSpm()">추가</button></div>
           <div class="tw" style="max-height:52vh"><table id="tSpm"></table></div>
           <datalist id="dlMc"></datalist></div>
         <div class="panel"><h3>MES 설비코드 연결</h3>
@@ -658,7 +658,7 @@ function ensureMaster(){
   const m=S.master;
   m.spmdb=m.spmdb||[];
   const k=new Set(m.spmdb.map(x=>x.mc+'|'+x.pn));
-  let n=0;SEED_MASTER.spmdb.forEach(x=>{if(!k.has(x.mc+'|'+x.pn)){m.spmdb.push(x);k.add(x.mc+'|'+x.pn);n++}});
+  let n=0;SEED_MASTER.spmdb.forEach(x=>{if(!x.mc)return;if(!k.has(x.mc+'|'+x.pn)){m.spmdb.push(x);k.add(x.mc+'|'+x.pn);n++}});
   const pns=new Set(m.items.map(i=>i.pn));
   SEED_MASTER.items.forEach(i=>{if(!pns.has(i.pn)){m.items.push(i);pns.add(i.pn)}});
   SEED_MASTER.mcs.forEach(v=>{if(!m.mcs.includes(v))m.mcs.push(v)});
@@ -687,9 +687,25 @@ function migrate(){
     Object.entries(PN_NAME).forEach(([pn,nm])=>{if(!have.has(pn))S.master.items.push({pn,name:nm,cust:'SBC',spm:0})});
     S.master.spmdb=(S.master.spmdb||[]).filter(x=>x.pn.indexOf('IW/OW BDA')<0);
     const k=new Set(S.master.spmdb.map(x=>x.mc+'|'+x.pn));
-    SEED_MASTER.spmdb.forEach(x=>{if(!k.has(x.mc+'|'+x.pn))S.master.spmdb.push(x)});
+    SEED_MASTER.spmdb.forEach(x=>{if(!x.mc)return;if(!k.has(x.mc+'|'+x.pn))S.master.spmdb.push(x)});
     S.master.mesPn=S.master.mesPn||{};
     Object.keys(S.master.mesPn).forEach(k2=>{if(String(S.master.mesPn[k2]).indexOf('IW/OW BDA')>=0)delete S.master.mesPn[k2]});
+  }
+  // [SPM 쌍 통일] 공통행(설비 비움)을 실제 일보에 쓰인 설비별 쌍으로 펼치고 공통행은 제거
+  if(!S.mig.spmPair){
+    const db=S.master.spmdb=S.master.spmdb||[];
+    const pair=new Set(db.filter(x=>x.mc).map(x=>x.mc+'|'+x.pn));
+    const usedMc={};S.recs.forEach(r=>{if(r.mc&&r.pn)(usedMc[r.pn]=usedMc[r.pn]||new Set()).add(r.mc)});
+    let exp=0,dropped=[];
+    db.filter(x=>!x.mc).forEach(c=>{
+      (usedMc[c.pn]||new Set()).forEach(mc=>{
+        const k=mc+'|'+c.pn;if(pair.has(k))return;
+        db.push({mc,pn:c.pn,spm:+c.spm||0});pair.add(k);exp++;
+      });
+      if(!(usedMc[c.pn]&&usedMc[c.pn].size))dropped.push(c.pn+'='+c.spm);
+    });
+    S.master.spmdb=db.filter(x=>x.mc);
+    S.mig.spmPair={at:now(),expanded:exp,dropped};
   }
   if(!S.mig.mesmc300){
     S.master.mesMc=S.master.mesMc||{};S.master.mesPn=S.master.mesPn||{};
@@ -962,16 +978,13 @@ $('f_auto').addEventListener('change',autoRun);
 $('f_stop').addEventListener('input',()=>{$('f_auto').checked=false});
 $('f_pn').addEventListener('change',onPn);
 function spmFor(mc,pn){
-  if(!pn)return 0;
+  // SPM 표준은 설비+품번 쌍이 키다. 공통값·예외 구분 없음.
+  if(!pn||!mc)return 0;
   const db=S.master.spmdb||[];
-  const sd=db.find(x=>x.pn===pn&&x.mc===mc); if(sd)return sd.spm;   // ① SPM 표준(설비 지정) — 예외
-  const nomc=db.find(x=>x.pn===pn&&!x.mc); if(nomc)return nomc.spm; // ② SPM 표준(공통값) — 기본
+  const sd=db.find(x=>x.pn===pn&&x.mc===mc); if(sd)return +sd.spm||0;   // ① 설비+품번 표준
   const last=S.recs.filter(r=>r.pn===pn&&r.mc===mc).sort((a,b)=>b.date.localeCompare(a.date))[0];
-  if(last&&last.spm)return last.spm;                       // ③ 같은 설비·품번 최근 일보
-  const any=db.filter(x=>x.pn===pn&&x.mc);                 // ④ 다른 설비 표준값 중 최빈값
-  if(any.length){const c={};any.forEach(x=>c[x.spm]=(c[x.spm]||0)+1);
-    return +Object.entries(c).sort((a,b)=>b[1]-a[1])[0][0]}
-  return 0;   // 품목 마스터 기본SPM은 사용하지 않는다 — SPM 표준 한 곳에서 관리
+  if(last&&last.spm)return +last.spm;                                     // ② 같은 설비·품번 최근 일보
+  return 0;
 }
 $('f_mc').addEventListener('change',()=>{const s=spmFor($('f_mc').value,$('f_pn').value);if(s){$('f_spm').value=s;readout()}});
 $('f_cust').addEventListener('change',()=>{fillPn();});
@@ -2255,13 +2268,13 @@ function cleanSpm(){
   const keep=[],drop=[];
   db.forEach(x=>{
     const k=(x.mc||'')+'|'+x.pn;
-    if(!x.mc){keep.push(x);return}                 // 공통행(설비 비움)은 유지
+    if(!x.mc){drop.push(x);return}                 // 설비 없는 행은 사용되지 않으므로 정리
     (std.has(k)||used.has(k)?keep:drop).push(x);
   });
   if(!drop.length){alert('정리할 항목이 없습니다.');return}
   const byMc={};drop.forEach(x=>{byMc[x.mc]=(byMc[x.mc]||0)+1});
   const list=Object.entries(byMc).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k} ${v}건`);
-  if(!confirm(`SPM 표준 정리\n\n현재 ${db.length}건 → ${keep.length}건 (${drop.length}건 삭제)\n\n남기는 것: 세팅 표준서 등록분 + 실제 일보에 쓰인 조합 + 공통행\n지우는 것: 사용 이력이 없는 자동 생성분\n\n${list.slice(0,12).join(' · ')}${list.length>12?' 외':''}\n\n진행할까요?`))return;
+  if(!confirm(`SPM 표준 정리\n\n현재 ${db.length}건 → ${keep.length}건 (${drop.length}건 삭제)\n\n남기는 것: 세팅 표준서 등록분 + 실제 일보에 쓰인 설비·품번 조합\n지우는 것: 사용 이력이 없는 자동 생성분 + 설비 미지정 행\n\n${list.slice(0,12).join(' · ')}${list.length>12?' 외':''}\n\n진행할까요?`))return;
   S.master.spmdb=keep;
   logAdd('SPM 표준 정리',`${db.length} → ${keep.length}건 (${drop.length}건 삭제)`);
   commit();renderMaster();
@@ -2426,7 +2439,7 @@ function drawSpmSuggest(){
    <p class="muted" style="font-size:12px;margin:0 0 10px">
      최근 <b>${SPMS.days}일</b> 일보에서 <b>실적 ÷ 가동시간</b>을 모아 <b>상위 ${SPMS.pct}퍼센타일</b>을 제안합니다.
      가동 ${SPMS.minRun}분 미만·표본 ${SPMS.minN}건 미만은 제외했습니다.
-     체크한 항목만 SPM 표준에 반영되며, 설비 지정 예외값으로 등록됩니다.</p>
+     체크한 항목만 해당 설비·품번의 SPM 표준에 반영됩니다.</p>
    <div class="fl" style="margin-bottom:8px;gap:8px;flex-wrap:wrap">
      <label>기간 <select onchange="SPMS.days=+this.value;spmSuggestCalc();drawSpmSuggest()">
        <option value="30"${SPMS.days==30?' selected':''}>30일</option>
@@ -2479,14 +2492,12 @@ function renderSpm(){
   $('dlMc').innerHTML=S.master.mcs.map(v=>`<option value="${esc(v)}">`).join('');
   $('tSpm').innerHTML='<tr><th>설비</th><th>품번</th><th class=num>SPM</th><th></th></tr>'
    +(L.length?L.map(x=>{
-      const exc=db.filter(y=>y.pn===x.pn&&y.mc&&+y.spm!==+x.spm);
-      const note=!x.mc&&exc.length
-        ? `<span class="tag a" title="이 설비들은 예외값이 우선합니다">예외 ${exc.length}대 우선</span>`
-        : (x.mc?'<span class="tag" style="background:#EEF2F7">예외</span>':'');
-      return `<tr><td>${x.mc?esc(x.mc):'<span class=muted>공통</span>'} ${note}</td><td>${esc(x.pn)}</td><td><input type=number value="${x.spm}" onchange="upSpm(${x.i},this.value)" style="width:70px;padding:3px 6px"></td><td><button class="s d" onclick="delSpm(${x.i})">삭제</button></td></tr>`}).join('')
+      const note=x.mc?'':'<span class="tag r" title="설비가 없는 행은 어디에도 적용되지 않습니다. 설비를 지정해 다시 등록하세요">설비 미지정</span>';
+      return `<tr><td>${x.mc?esc(x.mc):'<span class=muted>—</span>'} ${note}</td><td>${esc(x.pn)}</td><td><input type=number value="${x.spm}" onchange="upSpm(${x.i},this.value)" style="width:70px;padding:3px 6px"></td><td><button class="s d" onclick="delSpm(${x.i})">삭제</button></td></tr>`}).join('')
      :'<tr><td colspan=4 class=empty>해당 항목이 없습니다</td></tr>');
 }
 function addSpm(){const mc=$('sp_mc').value.trim(),pn=$('sp_pn').value.trim(),v=+$('sp_v').value||0;
+  if(!mc){toast('설비를 선택하세요 — SPM 표준은 설비+품번 단위입니다');return}
   if(!pn||!v){toast('품번과 SPM을 입력하세요');return}
   S.master.spmdb=S.master.spmdb||[];
   const ex=S.master.spmdb.find(x=>x.mc===mc&&x.pn===pn);
