@@ -99,7 +99,13 @@ async function main() {
       headers: { ...hdr, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
       body: JSON.stringify([{ key: DONE_KEY, value: keep, updated_at: new Date().toISOString() }]) });
     if (!r.ok) throw new Error("마감 기록 저장 실패 " + r.status);
-  } else log("(dry) 저장하지 않음");
+  } else {
+    log("(dry) 저장하지 않음");
+    // 확인용 결과를 남김 (원격 실행 결과 점검)
+    await fetch(`${SB_URL}/rest/v1/kv_store?on_conflict=key`, { method: "POST",
+      headers: { ...hdr, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
+      body: JSON.stringify([{ key: "tj_prod_autoclose_dry", value: { d, mode, at: new Date().toISOString(), before, wait, ok: summary, hold }, updated_at: new Date().toISOString() }]) });
+  }
   w.close();
 }
 main().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });
