@@ -8,8 +8,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const SB_URL = "https://ebthltdmxpzlkfwvdloz.supabase.co";
-const SB_KEY = "sb_publishable_ZSgcZapb7cTgFezGmOV_ow_9MT15SnS";
+const SB_URL = "https://omngtyewdaqpphnzeate.supabase.co";
+const SB_KEY = "sb_publishable_9j2YkkL-7ul1TrhH-NjVdQ_vWDG2-1D";
 const DONE_KEY = "tj_prod_autoclose_v1";   // 자동 마감 기록 {날짜: {evening, morning, n}}
 const AFTER = 10;                          // 업무 종료 후 이 시간(분) 뒤 마감
 
